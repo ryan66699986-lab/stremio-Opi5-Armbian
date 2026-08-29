@@ -1,0 +1,54 @@
+name: Build ARM64 package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout packaging repository
+        uses: actions/checkout@v4
+
+      - name: Confirm native ARM64 runner
+        run: |
+          uname -a
+          test "$(dpkg --print-architecture)" = arm64
+
+      - name: Install Ubuntu 26.04 build dependencies
+        run: ./scripts/install-deps.sh
+
+      - name: Inspect reference ARM64 package ELF dependencies
+        run: ./scripts/inspect-upstream-deb.sh
+
+      - name: Build official Stremio 4.4.181 source
+        run: ./scripts/build.sh
+
+      - name: Build Debian package
+        run: ./scripts/build-deb.sh
+
+      - name: Validate package explicitly
+        run: ./scripts/validate-deb.sh stremio_4.4.181-orp1_arm64.deb
+
+      - name: Test apt installation and dynamic linkage
+        run: |
+          sudo apt-get install -y ./stremio_4.4.181-orp1_arm64.deb
+          dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' stremio
+          ldd /opt/stremio/stremio
+          test -x /usr/bin/stremio
+          sudo apt-get remove -y stremio
+
+      - name: Upload ARM64 Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: stremio-4.4.181-orp1-arm64
+          path: stremio_4.4.181-orp1_arm64.deb
+          if-no-files-found: error
