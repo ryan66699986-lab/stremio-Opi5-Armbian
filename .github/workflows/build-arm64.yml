@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -62,3 +62,20 @@ jobs:
           name: stremio-4.4.181-orp1-arm64
           path: stremio_4.4.181-orp1_arm64.deb
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v4.4.181-orp1
+          RELEASE_ASSET: stremio_4.4.181-orp1_arm64.deb
+        run: |
+          set -euxo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$RELEASE_ASSET" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "Stremio 4.4.181 ARM64 (orp1)" \
+              --notes "Native ARM64 Debian package for Ubuntu 26.04 / Armbian, built from pinned official Stremio 4.4.181 source and validated by CI with package installation and dynamic-link checks."
+          fi
