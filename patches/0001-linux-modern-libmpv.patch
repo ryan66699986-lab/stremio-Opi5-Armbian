@@ -64,16 +64,14 @@ diff --git a/main.cpp b/main.cpp
 index d571c4e..0000000 100644
 --- a/main.cpp
 +++ b/main.cpp
-@@ -90,6 +90,9 @@ int main(int argc, char **argv)
-     // requires the LC_NUMERIC category to be set to "C", so change it back.
+@@ -94,4 +94,7 @@ int main(int argc, char **argv)
      std::setlocale(LC_NUMERIC, "C");
      
+ 
 +    // Qt WebEngine must be initialized before the QML engine on this target.
 +    QtWebEngine::initialize();
 +
      static QQmlApplicationEngine* engine = new QQmlApplicationEngine();
- 
-     qmlRegisterType<Process>("com.stremio.process", 1, 0, "Process");
 diff --git a/mpv.cpp b/mpv.cpp
 index 06fc4c4..0000000 100644
 --- a/mpv.cpp
