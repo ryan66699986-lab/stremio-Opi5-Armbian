@@ -1,3 +1,0 @@
-[submodule "deps/singleapplication"]
-	path = deps/singleapplication
-	url = https://github.com/itay-grudev/SingleApplication
