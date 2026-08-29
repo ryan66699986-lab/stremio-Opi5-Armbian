@@ -30,7 +30,17 @@ jobs:
         run: ./scripts/inspect-upstream-deb.sh
 
       - name: Build official Stremio 4.4.181 source
-        run: ./scripts/build.sh
+        run: |
+          set -o pipefail
+          ./scripts/build.sh 2>&1 | tee build.log
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stremio-arm64-build-log
+          path: build.log
+          if-no-files-found: warn
 
       - name: Build Debian package
         run: ./scripts/build-deb.sh
