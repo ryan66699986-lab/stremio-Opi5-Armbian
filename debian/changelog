@@ -1,0 +1,7 @@
+stremio (4.4.181-orp1) resolute; urgency=medium
+
+  * Build the official Stremio 4.4.181 shell natively for Ubuntu 26.04 ARM64.
+  * Use Ubuntu's system libmpv and generated shared-library dependencies.
+  * Remove the obsolete explicit librubberband2 package dependency.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Sat, 29 Aug 2026 17:00:00 +0100

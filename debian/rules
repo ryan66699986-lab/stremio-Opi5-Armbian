@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/
+
+override_dh_auto_install:
+	dh_auto_install
+	install -Dm644 server.js debian/stremio/opt/stremio/server.js
+	install -Dm644 smartcode-stremio.desktop debian/stremio/usr/share/applications/stremio.desktop
+	install -Dm644 images/stremio.svg debian/stremio/usr/share/icons/hicolor/scalable/apps/smartcode-stremio.svg

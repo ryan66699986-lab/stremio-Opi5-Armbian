@@ -1,0 +1,15 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Stremio Shell
+Source: https://github.com/Stremio/stremio-shell
+
+Files: *
+Copyright: Stremio contributors
+License: GPL-3.0
+
+Files: debian/*
+Copyright: 2026 stremio-Opi5-Armbian maintainers
+License: GPL-3.0
+
+License: GPL-3.0
+ This package is distributed under the GNU General Public License version 3.
+ The complete license text is shipped in /usr/share/common-licenses/GPL-3.
