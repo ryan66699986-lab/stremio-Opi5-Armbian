@@ -4,10 +4,20 @@
 	dh $@ --buildsystem=cmake
 
 override_dh_auto_configure:
-	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_INSTALL_PREFIX=/ \
+		-DMPV_INCLUDE_DIR=$(CURDIR)/rk3588-stack/include \
+		-DMPV_LIBRARY_mpv=$(CURDIR)/rk3588-stack/lib/libmpv.so
 
 override_dh_auto_install:
 	dh_auto_install
 	install -Dm644 server.js debian/stremio/opt/stremio/server.js
 	install -Dm644 smartcode-stremio.desktop debian/stremio/usr/share/applications/stremio.desktop
 	install -Dm644 images/stremio.svg debian/stremio/usr/share/icons/hicolor/scalable/apps/smartcode-stremio.svg
+	mkdir -p debian/stremio/opt/stremio/rk3588/lib
+	cp -a rk3588-stack/lib/. debian/stremio/opt/stremio/rk3588/lib/
+	patchelf --set-rpath '$$ORIGIN/rk3588/lib' debian/stremio/opt/stremio/stremio
+
+override_dh_shlibdeps:
+	dh_shlibdeps -- -l$(CURDIR)/debian/stremio/opt/stremio/rk3588/lib
