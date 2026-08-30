@@ -19,5 +19,12 @@ override_dh_auto_install:
 	cp -a rk3588-stack/lib/. debian/stremio/opt/stremio/rk3588/lib/
 	patchelf --set-rpath '$$ORIGIN/rk3588/lib' debian/stremio/opt/stremio/stremio
 
+override_dh_strip:
+	# The private RK3588 stack is installed from release builds and has already
+	# had its debug information removed.  Re-stripping those staged libraries
+	# makes GNU objcopy reject libmpv, so only let dh_strip process Stremio and
+	# other normal package files.
+	dh_strip -Xrk3588/lib
+
 override_dh_shlibdeps:
 	dh_shlibdeps -- -l$(CURDIR)/debian/stremio/opt/stremio/rk3588/lib
