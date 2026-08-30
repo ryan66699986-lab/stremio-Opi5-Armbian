@@ -57,19 +57,21 @@ grep -q 'AV_HWDEVICE_TYPE_V4L2REQUEST' "${PREFIX_DIR}/include/libavutil/hwcontex
 # FFmpeg's installed .pc files intentionally describe the final runtime prefix
 # (/opt/stremio/rk3588). During this staged package build, however, mpv must
 # compile and link against the DESTDIR copy. Give Meson a temporary pkg-config
-# view with only the prefix rebased to the staging tree. The package contents
-# themselves retain the correct final /opt prefix.
+# view with every final-prefix occurrence rebased to the staging tree. The
+# package contents themselves retain the correct final /opt paths.
 FFMPEG_BUILD_PC="${WORK_ROOT}/ffmpeg-pkgconfig"
 rm -rf "$FFMPEG_BUILD_PC"
 mkdir -p "$FFMPEG_BUILD_PC"
 cp -a "${FFMPEG_PC}/." "$FFMPEG_BUILD_PC/"
 while IFS= read -r -d '' pc; do
-  sed -i "s|^prefix=.*$|prefix=${PREFIX_DIR}|" "$pc"
+  sed -i "s|${RK_STACK_PREFIX}|${PREFIX_DIR}|g" "$pc"
 done < <(find "$FFMPEG_BUILD_PC" -type f -name '*.pc' -print0)
 
 echo "==> Verifying staged FFmpeg pkg-config paths"
-PKG_CONFIG_PATH="$FFMPEG_BUILD_PC" pkg-config --cflags libavutil | grep -F "${PREFIX_DIR}/include"
-PKG_CONFIG_PATH="$FFMPEG_BUILD_PC" pkg-config --libs libavutil | grep -F "${PREFIX_DIR}/lib"
+PKG_CONFIG_PATH="$FFMPEG_BUILD_PC" pkg-config --cflags libavutil | tee /tmp/rk-libavutil-cflags.txt
+grep -F "${PREFIX_DIR}/include" /tmp/rk-libavutil-cflags.txt
+PKG_CONFIG_PATH="$FFMPEG_BUILD_PC" pkg-config --libs libavutil | tee /tmp/rk-libavutil-libs.txt
+grep -F "${PREFIX_DIR}/lib" /tmp/rk-libavutil-libs.txt
 
 echo "==> Building pinned mpv/libmpv V4L2-request stack"
 clone_pinned "$RK_MPV_REPOSITORY" "$RK_MPV_COMMIT" "$MPV_DIR"
