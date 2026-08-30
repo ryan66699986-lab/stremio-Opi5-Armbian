@@ -10,22 +10,17 @@ V4L2-request multimedia stack:
   retaining only the bundled qthelper.hpp compatibility helper;
 * adapt the OpenGL init struct and removed cache properties for modern mpv;
 * translate legacy properties emitted by the Stremio web UI;
-* map Stremio's generic hwdec=yes/auto request to v4l2request-copy first, then
-  direct v4l2request and the normal safe fallback;
+* map Stremio's generic hwdec=yes/auto request to v4l2request first, with a
+  normal safe fallback for non-RK3588 media;
 * set AA_ShareOpenGLContexts and initialize Qt WebEngine before constructing
   QApplication/MainApp.
-
-The copy-first ordering keeps RK3588 hardware decoding while avoiding direct
-DRM-PRIME import of packed 10-bit surfaces in Stremio's legacy libmpv OpenGL
-render API. The pinned Rockchip mpv fork's NV15 unpack path is implemented in
-vo_gpu_next, which an embedded libmpv render client does not execute.
 
 This patch does not add, link, or load Rubber Band directly.
 ---
  CMakeLists.txt | 17 +++++++++++++++--
  main.cpp       |  4 ++++
- mpv.cpp        | 31 +++++++++++++++++++++++++++----
- 3 files changed, 46 insertions(+), 6 deletions(-)
+ mpv.cpp        | 28 ++++++++++++++++++++++++----
+ 3 files changed, 43 insertions(+), 6 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 5e68415..0000000 100644
@@ -109,7 +104,7 @@ index 06fc4c4..0000000 100644
      mpv::qt::set_property(mpv, "cache-secs", 10);
  
      // Visible app / stream names
-@@ -177,6 +177,29 @@ void MpvObject::command(const QVariant& params)
+@@ -177,6 +177,26 @@ void MpvObject::command(const QVariant& params)
  
  void MpvObject::setProperty(const QString& name, const QVariant& value)
  {
@@ -126,13 +121,9 @@ index 06fc4c4..0000000 100644
 +    }
 +    if (name == "hwdec" &&
 +        (value.toString() == "yes" || value.toString() == "auto")) {
-+        // Keep decoding on the RK3588 VPU, but prefer the copy variant. The
-+        // Stremio shell uses libmpv's OpenGL render API rather than mpv's
-+        // vo_gpu_next path, so directly imported packed 10-bit NV15 DRM PRIME
-+        // surfaces can be interpreted incorrectly by the legacy renderer.
-+        // v4l2request-copy downloads the decoded frame to a conventional
-+        // software pixel format before rendering; direct request decode and
-+        // mpv's normal safe methods remain fallbacks.
++        // The RK3588 mainline decoder is V4L2 Request. mpv does not include
++        // this method in the safe generic 'yes' autoprobe list, so try it
++        // explicitly before falling back to the normal safe methods.
 +        mpv::qt::set_property(mpv, "hwdec", "v4l2request-copy,v4l2request,auto-safe");
 +        return;
 +    }
