@@ -63,11 +63,11 @@ jobs:
           if-no-files-found: warn
 
       - name: Validate package explicitly
-        run: ./scripts/validate-deb.sh stremio_4.4.181-orp3_arm64.deb
+        run: ./scripts/validate-deb.sh stremio_4.4.181-orp4_arm64.deb
 
-      - name: Test apt installation and private RK3588 linkage
+      - name: Test apt installation, private RK3588 linkage, and gpu-next selection
         run: |
-          sudo apt-get install -y ./stremio_4.4.181-orp3_arm64.deb
+          sudo apt-get install -y ./stremio_4.4.181-orp4_arm64.deb
           dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' stremio
           file /opt/stremio/stremio
           test -x /usr/bin/stremio
@@ -76,23 +76,25 @@ jobs:
           ldd /opt/stremio/stremio | tee /tmp/stremio-ldd.txt
           grep -E 'libmpv\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
           grep -E 'libavcodec\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
-          strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 v4l2request
-          strings /opt/stremio/stremio | grep -m1 'v4l2request-copy'
+          strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 'v4l2request'
+          strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 'gpu-next'
+          strings /opt/stremio/stremio | grep -m1 'gpu-next'
+          strings /opt/stremio/stremio | grep -m1 'v4l2request,auto-safe'
           sudo apt-get remove -y stremio
 
       - name: Upload ARM64 Debian package
         uses: actions/upload-artifact@v4
         with:
-          name: stremio-4.4.181-orp3-arm64
-          path: stremio_4.4.181-orp3_arm64.deb
+          name: stremio-4.4.181-orp4-arm64
+          path: stremio_4.4.181-orp4_arm64.deb
           if-no-files-found: error
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v4.4.181-orp3
-          RELEASE_ASSET: stremio_4.4.181-orp3_arm64.deb
+          RELEASE_TAG: v4.4.181-orp4
+          RELEASE_ASSET: stremio_4.4.181-orp4_arm64.deb
         run: |
           set -euxo pipefail
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -100,6 +102,6 @@ jobs:
           else
             gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
-              --title "Stremio 4.4.181 ARM64 RK3588 V4L2-request copy (orp3)" \
-              --notes "ARM64 Stremio package for Ubuntu 26.04 / Armbian on RK3588. Keeps V4L2-request hardware decoding but prefers v4l2request-copy for Stremio's embedded libmpv OpenGL renderer, avoiding direct packed 10-bit NV15 DRM-PRIME import that can render as green/corrupt video. Direct v4l2request and normal safe methods remain fallbacks. CI validates package installation, private multimedia linkage, and the copy-first hwdec setting."
+              --title "Stremio 4.4.181 ARM64 RK3588 libmpv gpu-next (orp4)" \
+              --notes "ARM64 Stremio candidate for Ubuntu 26.04 / Armbian on RK3588. Keeps direct V4L2-request hardware decoding and layers the pinned upstream libmpv gpu-next render-API backend onto the Rockchip mpv fork. Stremio explicitly requests gpu-next so 10-bit DRM-PRIME/NV15 frames are rendered through the libplacebo-based path instead of the legacy embedded renderer. This targets the green/corrupt 4K HEVC Main10 rendering reproduced with orp2/orp3. Physical RK3588 playback remains the release gate."
           fi
