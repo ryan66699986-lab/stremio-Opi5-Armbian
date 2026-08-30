@@ -1,3 +1,13 @@
+stremio (4.4.181-orp5) resolute; urgency=medium
+
+  * Keep the libmpv gpu-next renderer that removed RK3588 Main10/NV15 green corruption.
+  * Restore lazy V4L2-request hardware-device creation inside the gpu-next render backend.
+  * Bridge DRM-PRIME DMA-BUF surfaces into the same libplacebo OpenGL GPU context.
+  * Import RK3588 NV15 as packed byte planes and unpack 10-bit luma/chroma on the GPU.
+  * Avoid the 4K HEVC Main10 software-decoding fallback observed with orp4.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Sun, 30 Aug 2026 20:45:00 +0100
+
 stremio (4.4.181-orp4) resolute; urgency=medium
 
   * Add the pinned libmpv gpu-next render-API backend on top of the RK3588 mpv fork.
@@ -27,7 +37,7 @@ stremio (4.4.181-orp2) resolute; urgency=medium
 
 stremio (4.4.181-orp1) resolute; urgency=medium
 
-  * Build the official Stremio 4.4.181 shell natively for Ubuntu 26.04 ARM64.
+  * Build the official Stremio 4.4.181 source natively for Ubuntu 26.04 ARM64.
   * Use Ubuntu's system libmpv and generated shared-library dependencies.
   * Remove the obsolete explicit librubberband2 package dependency.
 
