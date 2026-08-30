@@ -1,3 +1,12 @@
+stremio (4.4.181-orp2) resolute; urgency=medium
+
+  * Bundle a private pinned FFmpeg/libmpv stack under /opt/stremio/rk3588.
+  * Enable the RK3588 V4L2-request hardware-decoding userspace path.
+  * Keep private multimedia libraries isolated from system package libraries.
+  * Validate private libmpv/libavcodec linkage in native ARM64 CI.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Sun, 30 Aug 2026 16:30:00 +0100
+
 stremio (4.4.181-orp1) resolute; urgency=medium
 
   * Build the official Stremio 4.4.181 shell natively for Ubuntu 26.04 ARM64.

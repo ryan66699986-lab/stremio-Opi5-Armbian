@@ -16,24 +16,52 @@ if grep -Eqi '(^|[,[:space:]])librubberband2([[:space:],]|$)' <<<"$DEPENDS"; the
   echo "error: obsolete librubberband2 dependency remains: $DEPENDS" >&2
   exit 1
 fi
-if ! grep -Eq '(^|[,[:space:]])libmpv2([[:space:],]|$)' <<<"$DEPENDS"; then
-  echo "error: generated package metadata does not depend on libmpv2: $DEPENDS" >&2
-  exit 1
-fi
 
 dpkg-deb -x "$DEB" "$TMP/root"
-FOUND_ELF=0
+ROOT="$TMP/root"
+STREMIO="$ROOT/opt/stremio/stremio"
+RK_LIB="$ROOT/opt/stremio/rk3588/lib"
+
+test -x "$STREMIO" || { echo "error: Stremio executable missing" >&2; exit 1; }
+test -e "$RK_LIB/libmpv.so" || { echo "error: private RK3588 libmpv missing" >&2; exit 1; }
+
+readelf -h "$STREMIO" | grep -q 'Machine:.*AArch64' || {
+  echo "error: Stremio executable is not AArch64" >&2; exit 1;
+}
+readelf -d "$STREMIO" | grep -q 'Shared library: \[libmpv\.so' || {
+  echo "error: Stremio is not linked to libmpv" >&2; exit 1;
+}
+[[ $(patchelf --print-rpath "$STREMIO") == '$ORIGIN/rk3588/lib' ]] || {
+  echo "error: Stremio does not prefer the private RK3588 runtime" >&2; exit 1;
+}
+
+LIBMPV_REAL=$(readlink -f "$RK_LIB/libmpv.so")
+readelf -h "$LIBMPV_REAL" | grep -q 'Machine:.*AArch64' || {
+  echo "error: private libmpv is not AArch64" >&2; exit 1;
+}
+strings "$LIBMPV_REAL" | grep -q 'v4l2request' || {
+  echo "error: private libmpv does not contain V4L2-request support" >&2; exit 1;
+}
+
+# The private FFmpeg build must expose the V4L2 Request hwdevice ABI.
+LIBAVUTIL=$(find "$RK_LIB" -maxdepth 1 -type f -name 'libavutil.so.*' -print -quit)
+LIBAVCODEC=$(find "$RK_LIB" -maxdepth 1 -type f -name 'libavcodec.so.*' -print -quit)
+[[ -n "$LIBAVUTIL" && -n "$LIBAVCODEC" ]] || {
+  echo "error: private FFmpeg runtime libraries are missing" >&2; exit 1;
+}
+readelf -h "$LIBAVCODEC" | grep -q 'Machine:.*AArch64' || {
+  echo "error: private libavcodec is not AArch64" >&2; exit 1;
+}
+
 while IFS= read -r -d '' candidate; do
   if readelf -h "$candidate" >/dev/null 2>&1; then
-    FOUND_ELF=1
-    echo "ELF: ${candidate#${TMP}/root}"
-    readelf -d "$candidate" | grep NEEDED || true
+    echo "ELF: ${candidate#${ROOT}}"
+    readelf -d "$candidate" | grep -E 'NEEDED|RPATH|RUNPATH' || true
     if readelf -d "$candidate" 2>/dev/null | grep -q 'librubberband\.so\.2'; then
       echo "error: packaged ELF directly requires librubberband.so.2: $candidate" >&2
       exit 1
     fi
   fi
-done < <(find "$TMP/root" -type f -print0)
+done < <(find "$ROOT" -type f -print0)
 
-[[ "$FOUND_ELF" == 1 ]] || { echo "error: no ELF file found in package" >&2; exit 1; }
-echo "Validated: arm64 package, libmpv2 dependency present, no librubberband2 metadata or librubberband.so.2 NEEDED entry."
+echo "Validated: ARM64 package with private RK3588 V4L2-request libmpv/FFmpeg stack and no obsolete librubberband2 dependency."
