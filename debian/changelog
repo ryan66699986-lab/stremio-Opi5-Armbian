@@ -1,3 +1,12 @@
+stremio (4.4.181-orp4) resolute; urgency=medium
+
+  * Add the pinned libmpv gpu-next render-API backend on top of the RK3588 mpv fork.
+  * Make Stremio request gpu-next while retaining direct V4L2-request hardware decode.
+  * Keep Main10/NV15 frames in DRM PRIME instead of using the failed copy-back path.
+  * Target green/corrupt 4K HEVC Main10 Dolby Vision rendering seen on RK3588.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Sun, 30 Aug 2026 20:30:00 +0100
+
 stremio (4.4.181-orp3) resolute; urgency=medium
 
   * Prefer v4l2request-copy for Stremio's embedded libmpv renderer.
