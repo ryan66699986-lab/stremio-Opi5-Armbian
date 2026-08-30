@@ -32,7 +32,7 @@ jobs:
       - name: Build pinned RK3588 V4L2-request FFmpeg and libmpv stack
         run: |
           set -o pipefail
-          ./scripts/build-rk3588-stack.sh 2>&1 | tee rk3588-stack.log
+          bash ./scripts/build-rk3588-stack.sh 2>&1 | tee rk3588-stack.log
 
       - name: Build official Stremio 4.4.181 source
         run: |
