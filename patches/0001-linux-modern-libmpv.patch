@@ -94,11 +94,8 @@ index 06fc4c4..0000000 100644
 +            static char gpu_next_backend[] = "gpu-next";
              mpv_render_param params[]{
                  {MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
-                 {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
 +                {MPV_RENDER_PARAM_BACKEND, gpu_next_backend},
-                 {MPV_RENDER_PARAM_INVALID, nullptr}};
- 
-             if (mpv_render_context_create(&obj->mpv_gl, obj->mpv, params) < 0)
+                 {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
 @@ -138,8 +140,8 @@ void MpvObject::initialize_mpv() {
      //mpv::qt::set_property(mpv, "opengl-backend", "angle");
  
