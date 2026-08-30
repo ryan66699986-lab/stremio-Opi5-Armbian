@@ -1,3 +1,13 @@
+stremio (4.4.181-orp6) resolute; urgency=medium
+
+  * Keep the gpu-next NV15 unpack path that eliminated the green 4K output.
+  * Route V4L2-request DRM-PRIME mapping through mpv's EGL/OpenGL hwdec RA.
+  * Wrap EGL-imported GL textures into libplacebo instead of requesting unsupported OpenGL DMA-BUF imports.
+  * Preserve one hwdec mapper per queued frame and frame-local NV15 unpack geometry.
+  * Target the orp5 runtime failure where libplacebo OpenGL rejected PL_HANDLE_DMA_BUF and fell back to software decode.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Sun, 30 Aug 2026 22:20:00 +0100
+
 stremio (4.4.181-orp5) resolute; urgency=medium
 
   * Keep the libmpv gpu-next renderer that removed RK3588 Main10/NV15 green corruption.
