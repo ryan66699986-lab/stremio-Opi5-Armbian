@@ -48,7 +48,7 @@ index 5e68415..0000000 100644
    list(APPEND SOURCES images/stremio.icns)
    set_source_files_properties(images/stremio.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
    set(MPV_LIBRARY_mpv ${CMAKE_CURRENT_SOURCE_DIR}/iina/deps/lib/libmpv.dylib)
-@@ -95,7 +99,16 @@ target_include_directories(${PROJECT_NAME} PRIVATE
+@@ -95,6 +99,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE
    ${MPV_INCLUDE_DIR}
  )
  
