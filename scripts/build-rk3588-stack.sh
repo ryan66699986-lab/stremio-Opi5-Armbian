@@ -95,12 +95,17 @@ python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec.py" "$MPV_DIR"
 # mpv ra_hwdec_mapper across those queue entries: mapping a new image unmaps the
 # previous one. Give each hardware frame its own mapper before compiling.
 python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec-frame-lifetime.py" "$MPV_DIR"
+# Queue entries can span a resolution transition, so size the NV15 unpack target
+# from the acquired frame rather than mutable engine-global current_params.
+python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec-frame-geometry.py" "$MPV_DIR"
 # The pinned libplacebo dispatch API expects its own pl_log, not mpv's mp_log.
 sed -i 's/pl_dispatch_create(ra->log, ra->gpu)/pl_dispatch_create(ra->gpu->log, ra->gpu)/' \
   "$MPV_DIR/video/out/gpu_next/video.c"
 grep -q 'orp5: libmpv gpu-next hwdec bridge enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
 grep -q 'orp5: per-frame hwdec mapper lifetime enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
 grep -q 'supports_nv15_byte_planes = true' "$MPV_DIR/video/out/hwdec/dmabuf_interop_pl.c"
+grep -q 'struct mp_image \*mpi = frame->user_data;' "$MPV_DIR/video/out/gpu_next/video.c"
+grep -q 'mpi->params.w / 2' "$MPV_DIR/video/out/gpu_next/video.c"
 grep -q 'pl_dispatch_create(ra->gpu->log, ra->gpu)' "$MPV_DIR/video/out/gpu_next/video.c"
 
 clone_pinned "$RK_LIBPLACEBO_REPOSITORY" "$RK_LIBPLACEBO_COMMIT" "$MPV_DIR/subprojects/libplacebo"
