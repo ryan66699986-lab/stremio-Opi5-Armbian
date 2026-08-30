@@ -91,7 +91,7 @@ test -f "$MPV_DIR/video/out/gpu_next/libmpv_gpu_next.c"
 # and RK3588 NV15 GPU unpacking into libplacebo-compatible 10-bit planes.
 echo "==> Applying orp5 libmpv gpu-next RK3588 hwdec bridge"
 python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec.py" "$MPV_DIR"
-grep -q 'orp5: libmpv gpu-next hwdec bridge enabled' "$MPV_DIR/video/out/gpu_next/video.c"
+grep -q 'orp5: libmpv gpu-next hwdec bridge enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
 grep -q 'supports_nv15_byte_planes = true' "$MPV_DIR/video/out/hwdec/dmabuf_interop_pl.c"
 
 clone_pinned "$RK_LIBPLACEBO_REPOSITORY" "$RK_LIBPLACEBO_COMMIT" "$MPV_DIR/subprojects/libplacebo"
