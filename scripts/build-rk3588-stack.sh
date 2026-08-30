@@ -86,6 +86,14 @@ git -C "$MPV_DIR" cherry-pick --no-commit "$RK_MPV_GPU_NEXT_COMMIT"
 grep -q 'MPV_RENDER_PARAM_BACKEND' "$MPV_DIR/include/mpv/render.h"
 test -f "$MPV_DIR/video/out/gpu_next/libmpv_gpu_next.c"
 
+# orp5 restores the hwdec side that the draft libmpv gpu-next backend does not
+# implement upstream: V4L2-request device loading, DRM-PRIME DMA-BUF mapping,
+# and RK3588 NV15 GPU unpacking into libplacebo-compatible 10-bit planes.
+echo "==> Applying orp5 libmpv gpu-next RK3588 hwdec bridge"
+python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec.py" "$MPV_DIR"
+grep -q 'orp5: libmpv gpu-next hwdec bridge enabled' "$MPV_DIR/video/out/gpu_next/video.c"
+grep -q 'supports_nv15_byte_planes = true' "$MPV_DIR/video/out/hwdec/dmabuf_interop_pl.c"
+
 clone_pinned "$RK_LIBPLACEBO_REPOSITORY" "$RK_LIBPLACEBO_COMMIT" "$MPV_DIR/subprojects/libplacebo"
 git -C "$MPV_DIR/subprojects/libplacebo" submodule update --init --recursive
 
@@ -138,6 +146,8 @@ readelf -h "$LIBMPV_REAL" | grep -q 'Machine:.*AArch64'
 readelf -d "$LIBMPV_REAL" | grep NEEDED
 strings "$LIBMPV_REAL" | grep -q 'v4l2request'
 strings "$LIBMPV_REAL" | grep -q 'gpu-next'
+strings "$LIBMPV_REAL" | grep -q 'orp5: libmpv gpu-next hwdec bridge enabled'
+strings "$LIBMPV_REAL" | grep -q 'unpacked NV15 with libplacebo GPU dispatch'
 
 cat >"${WORK_ROOT}/stack.env" <<EOF
 RK_STACK_STAGE=${STAGE_DIR}
@@ -150,4 +160,5 @@ echo "RK3588 stack built:"
 echo "  FFmpeg: ${RK_FFMPEG_COMMIT}"
 echo "  mpv: ${RK_MPV_COMMIT}"
 echo "  libmpv gpu-next: ${RK_MPV_GPU_NEXT_COMMIT}"
+echo "  orp5 hwdec bridge: enabled"
 echo "  prefix: ${PREFIX_DIR}"
