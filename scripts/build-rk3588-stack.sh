@@ -75,6 +75,17 @@ grep -F "${PREFIX_DIR}/lib" /tmp/rk-libavutil-libs.txt
 
 echo "==> Building pinned mpv/libmpv V4L2-request stack"
 clone_pinned "$RK_MPV_REPOSITORY" "$RK_MPV_COMMIT" "$MPV_DIR"
+
+# Stremio uses the libmpv render API rather than mpv's standalone vo_gpu_next.
+# Apply the pinned upstream gpu-next render-API backend on top of the Rockchip
+# fork without replacing its RK3588 V4L2-request/NV15 work.
+echo "==> Applying pinned libmpv gpu-next render backend"
+git -C "$MPV_DIR" remote add gpu-next "$RK_MPV_GPU_NEXT_REPOSITORY"
+git -C "$MPV_DIR" fetch --depth=2 gpu-next "$RK_MPV_GPU_NEXT_COMMIT"
+git -C "$MPV_DIR" cherry-pick --no-commit "$RK_MPV_GPU_NEXT_COMMIT"
+grep -q 'MPV_RENDER_PARAM_BACKEND' "$MPV_DIR/include/mpv/render.h"
+test -f "$MPV_DIR/video/out/gpu_next/libmpv_gpu_next.c"
+
 clone_pinned "$RK_LIBPLACEBO_REPOSITORY" "$RK_LIBPLACEBO_COMMIT" "$MPV_DIR/subprojects/libplacebo"
 git -C "$MPV_DIR/subprojects/libplacebo" submodule update --init --recursive
 
@@ -109,6 +120,7 @@ DESTDIR="$STAGE_DIR" meson install -C "${MPV_DIR}/build"
 
 test -e "${PREFIX_DIR}/lib/libmpv.so"
 test -e "${PREFIX_DIR}/include/mpv/client.h"
+grep -q 'MPV_RENDER_PARAM_BACKEND' "${PREFIX_DIR}/include/mpv/render.h"
 
 # Keep the private multimedia stack self-contained. Stremio gets its own
 # $ORIGIN/rk3588/lib RPATH; private libmpv/FFmpeg libraries resolve peers here.
@@ -125,6 +137,7 @@ LIBMPV_REAL=$(readlink -f "${PREFIX_DIR}/lib/libmpv.so")
 readelf -h "$LIBMPV_REAL" | grep -q 'Machine:.*AArch64'
 readelf -d "$LIBMPV_REAL" | grep NEEDED
 strings "$LIBMPV_REAL" | grep -q 'v4l2request'
+strings "$LIBMPV_REAL" | grep -q 'gpu-next'
 
 cat >"${WORK_ROOT}/stack.env" <<EOF
 RK_STACK_STAGE=${STAGE_DIR}
@@ -136,4 +149,5 @@ EOF
 echo "RK3588 stack built:"
 echo "  FFmpeg: ${RK_FFMPEG_COMMIT}"
 echo "  mpv: ${RK_MPV_COMMIT}"
+echo "  libmpv gpu-next: ${RK_MPV_GPU_NEXT_COMMIT}"
 echo "  prefix: ${PREFIX_DIR}"
