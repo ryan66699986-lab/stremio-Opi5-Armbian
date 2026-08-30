@@ -19,12 +19,36 @@ sudo apt-get install -y \
   fakeroot \
   file \
   git \
-  libmpv-dev \
+  libasound2-dev \
+  libass-dev \
+  libdisplay-info-dev \
+  libdrm-dev \
+  libegl1-mesa-dev \
+  libgbm-dev \
+  libgnutls28-dev \
+  libjpeg-dev \
+  liblcms2-dev \
+  libpipewire-0.3-dev \
+  libpulse-dev \
   libqt5opengl5-dev \
   libqt5webchannel5-dev \
   libssl-dev \
+  libudev-dev \
+  libvulkan-dev \
+  libwayland-dev \
+  libx11-dev \
+  libxext-dev \
+  libxkbcommon-dev \
+  libxpresent-dev \
+  libxrandr-dev \
+  libxss-dev \
+  meson \
+  ninja-build \
   patch \
+  patchelf \
   pkgconf \
   qtbase5-dev \
   qtdeclarative5-dev \
-  qtwebengine5-dev
+  qtwebengine5-dev \
+  wayland-protocols \
+  zlib1g-dev
