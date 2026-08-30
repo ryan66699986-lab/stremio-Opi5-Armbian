@@ -91,10 +91,15 @@ test -f "$MPV_DIR/video/out/gpu_next/libmpv_gpu_next.c"
 # and RK3588 NV15 GPU unpacking into libplacebo-compatible 10-bit planes.
 echo "==> Applying orp5 libmpv gpu-next RK3588 hwdec bridge"
 python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec.py" "$MPV_DIR"
+# libplacebo's queue can retain multiple mapped source frames. Do not share one
+# mpv ra_hwdec_mapper across those queue entries: mapping a new image unmaps the
+# previous one. Give each hardware frame its own mapper before compiling.
+python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec-frame-lifetime.py" "$MPV_DIR"
 # The pinned libplacebo dispatch API expects its own pl_log, not mpv's mp_log.
 sed -i 's/pl_dispatch_create(ra->log, ra->gpu)/pl_dispatch_create(ra->gpu->log, ra->gpu)/' \
   "$MPV_DIR/video/out/gpu_next/video.c"
 grep -q 'orp5: libmpv gpu-next hwdec bridge enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
+grep -q 'orp5: per-frame hwdec mapper lifetime enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
 grep -q 'supports_nv15_byte_planes = true' "$MPV_DIR/video/out/hwdec/dmabuf_interop_pl.c"
 grep -q 'pl_dispatch_create(ra->gpu->log, ra->gpu)' "$MPV_DIR/video/out/gpu_next/video.c"
 
@@ -151,6 +156,7 @@ readelf -d "$LIBMPV_REAL" | grep NEEDED
 strings "$LIBMPV_REAL" | grep -q 'v4l2request'
 strings "$LIBMPV_REAL" | grep -q 'gpu-next'
 strings "$LIBMPV_REAL" | grep -q 'orp5: libmpv gpu-next hwdec bridge enabled'
+strings "$LIBMPV_REAL" | grep -q 'orp5: per-frame hwdec mapper lifetime enabled'
 strings "$LIBMPV_REAL" | grep -q 'unpacked NV15 with libplacebo GPU dispatch'
 
 cat >"${WORK_ROOT}/stack.env" <<EOF
@@ -164,5 +170,5 @@ echo "RK3588 stack built:"
 echo "  FFmpeg: ${RK_FFMPEG_COMMIT}"
 echo "  mpv: ${RK_MPV_COMMIT}"
 echo "  libmpv gpu-next: ${RK_MPV_GPU_NEXT_COMMIT}"
-echo "  orp5 hwdec bridge: enabled"
+echo "  orp5 hwdec bridge: enabled (per-frame mapper lifetime)"
 echo "  prefix: ${PREFIX_DIR}"
