@@ -1,5 +1,5 @@
 From: stremio-Opi5-Armbian maintainers
-Subject: [PATCH] Linux: modern libmpv API and RK3588 V4L2-request decode
+Subject: [PATCH] Linux: modern libmpv API and RK3588 gpu-next rendering
 
 Keep the official 4.4.181 shell source as the base while applying the Linux
 compatibility changes needed by current Qt/libmpv and the private RK3588
@@ -9,9 +9,11 @@ V4L2-request multimedia stack:
 * allow the build to use the configured libmpv client headers/library while
   retaining only the bundled qthelper.hpp compatibility helper;
 * adapt the OpenGL init struct and removed cache properties for modern mpv;
+* request the libmpv gpu-next render backend so Stremio uses libplacebo's
+  renderer rather than the legacy render-API GPU path;
 * translate legacy properties emitted by the Stremio web UI;
-* map Stremio's generic hwdec=yes/auto request to v4l2request first, with a
-  normal safe fallback for non-RK3588 media;
+* map Stremio's generic hwdec=yes/auto request to direct v4l2request first,
+  with a normal safe fallback for non-RK3588 media;
 * set AA_ShareOpenGLContexts and initialize Qt WebEngine before constructing
   QApplication/MainApp.
 
@@ -19,8 +21,8 @@ This patch does not add, link, or load Rubber Band directly.
 ---
  CMakeLists.txt | 17 +++++++++++++++--
  main.cpp       |  4 ++++
- mpv.cpp        | 28 ++++++++++++++++++++++++----
- 3 files changed, 43 insertions(+), 6 deletions(-)
+ mpv.cpp        | 30 ++++++++++++++++++++++++++----
+ 3 files changed, 45 insertions(+), 6 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 5e68415..0000000 100644
@@ -83,16 +85,21 @@ diff --git a/mpv.cpp b/mpv.cpp
 index 06fc4c4..0000000 100644
 --- a/mpv.cpp
 +++ b/mpv.cpp
-@@ -54,7 +54,7 @@ class MpvRenderer : public QQuickFramebufferObject::Renderer
+@@ -54,7 +54,9 @@ class MpvRenderer : public QQuickFramebufferObject::Renderer
          // init mpv_gl:
          if (!obj->mpv_gl)
          {
 -            mpv_opengl_init_params gl_init_params{get_proc_address_mpv, nullptr, nullptr};
 +            mpv_opengl_init_params gl_init_params{get_proc_address_mpv, nullptr};
++            static char gpu_next_backend[] = "gpu-next";
              mpv_render_param params[]{
                  {MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
                  {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
-@@ -138,8 +138,8 @@ void MpvObject::initialize_mpv() {
++                {MPV_RENDER_PARAM_BACKEND, gpu_next_backend},
+                 {MPV_RENDER_PARAM_INVALID, nullptr}};
+ 
+             if (mpv_render_context_create(&obj->mpv_gl, obj->mpv, params) < 0)
+@@ -138,8 +140,8 @@ void MpvObject::initialize_mpv() {
      //mpv::qt::set_property(mpv, "opengl-backend", "angle");
  
 -    // Set cache to a reasonable value
@@ -104,7 +111,7 @@ index 06fc4c4..0000000 100644
      mpv::qt::set_property(mpv, "cache-secs", 10);
  
      // Visible app / stream names
-@@ -177,6 +177,26 @@ void MpvObject::command(const QVariant& params)
+@@ -177,6 +179,26 @@ void MpvObject::command(const QVariant& params)
  
  void MpvObject::setProperty(const QString& name, const QVariant& value)
  {
@@ -121,10 +128,10 @@ index 06fc4c4..0000000 100644
 +    }
 +    if (name == "hwdec" &&
 +        (value.toString() == "yes" || value.toString() == "auto")) {
-+        // The RK3588 mainline decoder is V4L2 Request. mpv does not include
-+        // this method in the safe generic 'yes' autoprobe list, so try it
-+        // explicitly before falling back to the normal safe methods.
-+        mpv::qt::set_property(mpv, "hwdec", "v4l2request-copy,v4l2request,auto-safe");
++        // Keep decoded RK3588 frames in DRM PRIME so the libmpv gpu-next
++        // backend can consume the packed NV15 surfaces directly. The copy
++        // path cannot transfer these Main10 frames back on this stack.
++        mpv::qt::set_property(mpv, "hwdec", "v4l2request,auto-safe");
 +        return;
 +    }
 +
