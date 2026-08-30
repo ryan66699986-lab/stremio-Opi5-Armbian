@@ -269,23 +269,15 @@ replace_once(
 """,
 )
 
-replace_once(
-    "video/out/gpu_next/video.c",
-    """            orp5_hwdec_bridge_unmap(p->hwdec_bridge);
-""",
-    """            orp5_hwdec_frame_unmap(fp->hwdec_frame);
-""",
-)
-
-# There are two remaining bridge-unmap calls: the NV15 unpack failure and the
-# normal release callback. Convert both deliberately after the single inner-loop
-# occurrence above has been replaced.
+# All three bridge unmaps in video.c are per-frame acquire/release paths:
+# NV15 unpack failure, regular plane-map failure, and the release callback.
+# Convert them together after the mapper/texture calls above have been rebound.
 video_path = root / "video/out/gpu_next/video.c"
 video_data = video_path.read_text()
 old = "orp5_hwdec_bridge_unmap(p->hwdec_bridge);"
-if video_data.count(old) != 2:
+if video_data.count(old) != 3:
     raise SystemExit(
-        f"video/out/gpu_next/video.c: expected two remaining bridge unmaps, found {video_data.count(old)}"
+        f"video/out/gpu_next/video.c: expected three bridge unmaps, found {video_data.count(old)}"
     )
 video_path.write_text(video_data.replace(old, "orp5_hwdec_frame_unmap(fp->hwdec_frame);"))
 
