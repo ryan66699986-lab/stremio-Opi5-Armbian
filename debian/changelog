@@ -1,3 +1,12 @@
+stremio (4.4.181-orp3) resolute; urgency=medium
+
+  * Prefer v4l2request-copy for Stremio's embedded libmpv renderer.
+  * Keep RK3588 VPU decoding while avoiding direct packed NV15 DRM-PRIME import.
+  * Retain direct v4l2request and normal safe hardware methods as fallbacks.
+  * Target green/corrupt rendering observed during 4K runtime validation.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Sun, 30 Aug 2026 20:00:00 +0100
+
 stremio (4.4.181-orp2) resolute; urgency=medium
 
   * Bundle a private pinned FFmpeg/libmpv stack under /opt/stremio/rk3588.
