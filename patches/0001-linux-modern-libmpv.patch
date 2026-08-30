@@ -1,22 +1,26 @@
 From: stremio-Opi5-Armbian maintainers
-Subject: [PATCH] Linux: build against system libmpv and modern mpv API
+Subject: [PATCH] Linux: modern libmpv API and RK3588 V4L2-request decode
 
-Keep the official 4.4.181 shell source as the base while applying the small
-Linux compatibility changes needed by current Ubuntu/libmpv:
+Keep the official 4.4.181 shell source as the base while applying the Linux
+compatibility changes needed by current Qt/libmpv and the private RK3588
+V4L2-request multimedia stack:
 
 * select Qt 5 on non-Windows builds as well;
-* use the distro libmpv client headers/library on Linux, retaining only the
-  bundled qthelper.hpp compatibility helper;
+* allow the build to use the configured libmpv client headers/library while
+  retaining only the bundled qthelper.hpp compatibility helper;
 * adapt the OpenGL init struct and removed cache properties for modern mpv;
 * translate legacy properties emitted by the Stremio web UI;
-* initialize Qt WebEngine before constructing the QML engine.
+* map Stremio's generic hwdec=yes/auto request to v4l2request first, with a
+  normal safe fallback for non-RK3588 media;
+* set AA_ShareOpenGLContexts and initialize Qt WebEngine before constructing
+  QApplication/MainApp.
 
 This patch does not add, link, or load Rubber Band directly.
 ---
  CMakeLists.txt | 17 ++++++++++++++---
- main.cpp       |  3 +++
- mpv.cpp        | 22 ++++++++++++++++++----
- 3 files changed, 35 insertions(+), 7 deletions(-)
+ main.cpp       |  4 ++++
+ mpv.cpp        | 27 +++++++++++++++++++++++----
+ 3 files changed, 41 insertions(+), 7 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 5e68415..0000000 100644
@@ -48,9 +52,9 @@ index 5e68415..0000000 100644
    ${MPV_INCLUDE_DIR}
  )
  
-+# qthelper.hpp is not installed by libmpv-dev.  Use only that compatibility
-+# helper from the pinned libmpv submodule so its old client.h cannot shadow
-+# Ubuntu's system libmpv headers.
++# qthelper.hpp is not installed by libmpv. Use only that compatibility helper
++# from the pinned libmpv submodule so its old client.h cannot shadow the
++# configured modern libmpv headers.
 +if(UNIX AND NOT APPLE)
 +  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/mpv-compat/mpv)
 +  file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/deps/libmpv/include/mpv/qthelper.hpp DESTINATION ${CMAKE_BINARY_DIR}/mpv-compat/mpv)
@@ -64,14 +68,17 @@ diff --git a/main.cpp b/main.cpp
 index d571c4e..0000000 100644
 --- a/main.cpp
 +++ b/main.cpp
-@@ -94,4 +94,7 @@ int main(int argc, char **argv)
-     std::setlocale(LC_NUMERIC, "C");
-     
+@@ -70,6 +70,10 @@ int main(int argc, char **argv)
+     Application::setAttribute(Qt::AA_EnableHighDpiScaling);
+     #endif
  
-+    // Qt WebEngine must be initialized before the QML engine on this target.
++    // These must be set/initialized before QApplication/MainApp is created.
++    Application::setAttribute(Qt::AA_ShareOpenGLContexts);
 +    QtWebEngine::initialize();
 +
-     static QQmlApplicationEngine* engine = new QQmlApplicationEngine();
+     Application::setApplicationName("Stremio");
+     Application::setApplicationVersion(STREMIO_SHELL_VERSION);
+     Application::setOrganizationName("Smart Code ltd");
 diff --git a/mpv.cpp b/mpv.cpp
 index 06fc4c4..0000000 100644
 --- a/mpv.cpp
@@ -97,7 +104,7 @@ index 06fc4c4..0000000 100644
      mpv::qt::set_property(mpv, "cache-secs", 10);
  
      // Visible app / stream names
-@@ -177,6 +177,18 @@ void MpvObject::command(const QVariant& params)
+@@ -177,6 +177,23 @@ void MpvObject::command(const QVariant& params)
  
  void MpvObject::setProperty(const QString& name, const QVariant& value)
  {
@@ -110,6 +117,14 @@ index 06fc4c4..0000000 100644
 +        return;
 +    }
 +    if (name == "cache-default" || name == "cache-backbuffer") {
++        return;
++    }
++    if (name == "hwdec" &&
++        (value.toString() == "yes" || value.toString() == "auto")) {
++        // The RK3588 mainline decoder is V4L2 Request. mpv does not include
++        // this method in the safe generic 'yes' autoprobe list, so try it
++        // explicitly before falling back to the normal safe methods.
++        mpv::qt::set_property(mpv, "hwdec", "v4l2request,auto-safe");
 +        return;
 +    }
 +
