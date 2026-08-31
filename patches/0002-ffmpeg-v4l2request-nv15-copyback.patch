@@ -1,0 +1,108 @@
+diff --git a/libavutil/hwcontext_v4l2request.c b/libavutil/hwcontext_v4l2request.c
+--- a/libavutil/hwcontext_v4l2request.c
++++ b/libavutil/hwcontext_v4l2request.c
+@@ -1077,12 +1077,39 @@ static int v4l2request_transfer_get_formats(AVHWFramesContext *hwfc,
+                                             enum AVPixelFormat **formats)
+ {
++    AVV4L2RequestFramesContext *fctx = hwfc->hwctx;
++    AVV4L2RequestFramesContextInternal *fctxi = fctx->internal;
+     enum AVPixelFormat *fmts;
++    uint32_t pixelformat;
++    int nv15 = 0;
+ 
+     if (dir == AV_HWFRAME_TRANSFER_DIRECTION_TO)
+         return AVERROR(ENOSYS);
++
++    if (V4L2_TYPE_IS_MULTIPLANAR(fctxi->capture.format.type))
++        pixelformat = fctxi->capture.format.fmt.pix_mp.pixelformat;
++    else
++        pixelformat = fctxi->capture.format.fmt.pix.pixelformat;
++
++#if defined(V4L2_PIX_FMT_NV15) && defined(DRM_FORMAT_NV15)
++    nv15 = pixelformat == V4L2_PIX_FMT_NV15;
++#endif
+ 
+     fmts = av_malloc_array(2, sizeof(*fmts));
+     if (!fmts)
+         return AVERROR(ENOMEM);
+@@ -1091,13 +1118,51 @@ static int v4l2request_transfer_get_formats(AVHWFramesContext *hwfc,
+     fmts[1] = AV_PIX_FMT_NONE;
+ 
+     if (hwfc->sw_format == AV_PIX_FMT_YUV420P ||
+-        hwfc->sw_format == AV_PIX_FMT_YUV420P10 ||
++        (hwfc->sw_format == AV_PIX_FMT_YUV420P10 && !nv15) ||
+         hwfc->sw_format == AV_PIX_FMT_YUV422P10)
+         fmts[0] = AV_PIX_FMT_NONE;
+ 
+     *formats = fmts;
+     return 0;
+ }
++
++#if defined(V4L2_PIX_FMT_NV15) && defined(DRM_FORMAT_NV15)
++static inline void v4l2request_unpack_nv15_4(const uint8_t *src, uint16_t *dst)
++{
++    dst[0] = ((uint16_t)src[0] << 2) | (src[1] >> 6);
++    dst[1] = ((uint16_t)(src[1] & 0x3f) << 4) | (src[2] >> 4);
++    dst[2] = ((uint16_t)(src[2] & 0x0f) << 6) | (src[3] >> 2);
++    dst[3] = ((uint16_t)(src[3] & 0x03) << 8) | src[4];
++}
++
++static int v4l2request_copy_nv15(AVFrame *dst, const AVFrame *map)
++{
++    const int width = dst->width;
++    const int height = dst->height;
++
++    if (dst->format != AV_PIX_FMT_YUV420P10 ||
++        (width & 3) || (height & 1) ||
++        map->linesize[0] < width * 5 / 4 ||
++        map->linesize[1] < width * 5 / 4 ||
++        dst->linesize[0] < width * 2 ||
++        dst->linesize[1] < width ||
++        dst->linesize[2] < width)
++        return AVERROR(EINVAL);
++
++    for (int y = 0; y < height; y++) {
++        const uint8_t *s = map->data[0] + y * map->linesize[0];
++        uint16_t *d = (uint16_t *)(dst->data[0] + y * dst->linesize[0]);
++        for (int x = 0; x < width; x += 4)
++            v4l2request_unpack_nv15_4(s + x * 5 / 4, d + x);
++    }
++
++    for (int y = 0; y < height / 2; y++) {
++        const uint8_t *s = map->data[1] + y * map->linesize[1];
++        uint16_t *u = (uint16_t *)(dst->data[1] + y * dst->linesize[1]);
++        uint16_t *v = (uint16_t *)(dst->data[2] + y * dst->linesize[2]);
++
++        for (int x = 0; x < width; x += 4) {
++            uint16_t uv[4];
++            v4l2request_unpack_nv15_4(s + x * 5 / 4, uv);
++            u[x / 2] = uv[0];
++            v[x / 2] = uv[1];
++            u[x / 2 + 1] = uv[2];
++            v[x / 2 + 1] = uv[3];
++        }
++    }
++
++    return 0;
++}
++#endif
+ 
+ static int v4l2request_transfer_data_from(AVHWFramesContext *hwfc,
+                                           AVFrame *dst, const AVFrame *src)
+@@ -1117,6 +1182,15 @@ static int v4l2request_transfer_data_from(AVHWFramesContext *hwfc,
+     map->width  = dst->width;
+     map->height = dst->height;
+ 
++#if defined(V4L2_PIX_FMT_NV15) && defined(DRM_FORMAT_NV15)
++    {
++        const AVDRMFrameDescriptor *desc = (const AVDRMFrameDescriptor *)src->data[0];
++        if (desc && desc->nb_layers == 1 && desc->layers[0].format == DRM_FORMAT_NV15) {
++            ret = v4l2request_copy_nv15(dst, map);
++            goto fail;
++        }
++    }
++#endif
++
+     ret = av_frame_copy(dst, map);
+     if (ret)
+         goto fail;
