@@ -29,6 +29,20 @@ jobs:
       - name: Build Debian package
         run: ./scripts/build-deb.sh
 
+      - name: Validate Debian package and RK3588 renderer markers
+        run: bash ./scripts/validate-deb.sh stremio_4.4.181-orp9_arm64.deb
+
+      - name: Test installation and private multimedia linkage
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y ./stremio_4.4.181-orp9_arm64.deb
+          test "$(dpkg-query -W -f='${Architecture}' stremio)" = arm64
+          test "$(readlink -f /usr/bin/stremio)" = /opt/stremio/stremio
+          ldd /opt/stremio/stremio | tee /tmp/stremio-ldd.txt
+          grep -E 'libmpv\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
+          grep -E 'libavcodec\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
+          sudo apt-get remove -y stremio
+
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
@@ -49,5 +63,5 @@ jobs:
             gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
               --title "Stremio 4.4.181 ARM64 RK3588 (orp9)" \
-              --notes "Orange Pi 5 Pro test build. Hardware playback is validated on the board."
+              --notes "Orange Pi 5 Pro RK3588 build. CI validates ARM64 packaging and private V4L2-request/gpu-next linkage; physical playback validation status is documented in the repository."
           fi
