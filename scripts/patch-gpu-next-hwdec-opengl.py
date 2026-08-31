@@ -22,7 +22,73 @@ def write(rel, content):
     path.write_text(content)
 
 
-# Use the frame being acquired for NV15 unpack dimensions.
+# The Qt render context is desktop OpenGL on the Orange Pi. Rockchip's generic
+# DMA-BUF path correctly selects GL_EXT_EGL_image_storage, but its NV15 special
+# case used the OES texture-image entry point unconditionally. On desktop GL,
+# create fresh NV15 textures per mapped frame and bind the EGLImages with the
+# EXT image-storage entry point instead.
+replace_once(
+    "video/out/hwdec/dmabuf_interop_gl.c",
+    """    if (p_mapper->external_nv15)
+        return p->EGLImageTargetTexture2DOES && init_nv15_sources(mapper);
+""",
+    """    if (p_mapper->external_nv15) {
+        if (!ra_gl_get(mapper->ra)->es && p->EGLImageTargetTexStorageEXT)
+            return true;
+        return p->EGLImageTargetTexture2DOES && init_nv15_sources(mapper);
+    }
+""",
+)
+replace_once(
+    "video/out/hwdec/dmabuf_interop_gl.c",
+    """    if (p_mapper->external_nv15) {
+        if (p_mapper->desc.nb_layers != 1 ||
+            p_mapper->desc.layers[0].format != DRM_FORMAT_NV15 ||
+            p_mapper->desc.layers[0].nb_planes != 2)
+            return false;
+
+        for (int j = 0; j < 2; j++) {
+""",
+    """    if (p_mapper->external_nv15) {
+        if (p_mapper->desc.nb_layers != 1 ||
+            p_mapper->desc.layers[0].format != DRM_FORMAT_NV15 ||
+            p_mapper->desc.layers[0].nb_planes != 2)
+            return false;
+
+        if (p->EGLImageTargetTexStorageEXT && !gl->es &&
+            !init_nv15_sources(mapper))
+            return false;
+
+        for (int j = 0; j < 2; j++) {
+""",
+)
+replace_once(
+    "video/out/hwdec/dmabuf_interop_gl.c",
+    """            gl->BindTexture(GL_TEXTURE_2D, p->gl_textures[j]);
+            p->EGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+""",
+    """            gl->BindTexture(GL_TEXTURE_2D, p->gl_textures[j]);
+            if (p->EGLImageTargetTexStorageEXT && !gl->es)
+                p->EGLImageTargetTexStorageEXT(GL_TEXTURE_2D, image, NULL);
+            else
+                p->EGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+""",
+)
+replace_once(
+    "video/out/hwdec/dmabuf_interop_gl.c",
+    """    if (p->EGLImageTargetTexStorageEXT && !p_mapper->external_nv15) {
+        // textures are immutable, can't reuse
+        gl_delete_textures(mapper);
+    }
+""",
+    """    if (p->EGLImageTargetTexStorageEXT) {
+        // EXT image storage is immutable, so recreate textures for each map.
+        gl_delete_textures(mapper);
+    }
+""",
+)
+
+# Use the frame actually being acquired for NV15 output dimensions.
 replace_once(
     "video/out/gpu_next/video.c",
     """static bool hwdec_unpack_nv15(struct pl_video *p, struct frame_priv *fp,
@@ -47,9 +113,9 @@ replace_once(
 """,
 )
 
-# Build mpv's legacy OpenGL RA on Stremio's current GL context. Rockchip's
-# DRM-PRIME importer uses that RA, while gpu-next continues rendering through
-# libplacebo on the same context.
+# Build mpv's legacy OpenGL RA on Stremio's current client GL context so the
+# Rockchip DRM-PRIME mapper can import DMA-BUFs, then wrap those GL textures for
+# the libplacebo gpu-next renderer.
 replace_once(
     "video/out/gpu_next/libmpv_gpu_next.h",
     """#include \"mpv/render.h\"      // for mpv_render_param
@@ -251,7 +317,6 @@ struct orp5_hwdec_bridge {
     struct ra_hwdec *active_hwdec;
     struct ra_hwdec_mapper *mapper;
     pl_tex wrapped[4];
-    bool nv15;
 };
 
 static void destroy_wrapped_textures(struct orp5_hwdec_bridge *b)
@@ -340,11 +405,11 @@ bool orp5_hwdec_bridge_prepare(struct orp5_hwdec_bridge *b,
     }
 
     *dst = b->mapper->dst_params;
-    const char *subfmt = mp_imgfmt_to_name(src->hw_subfmt);
-    b->nv15 = subfmt && strcmp(subfmt, "yuv420p10") == 0 &&
-              b->mapper->dst_params.imgfmt == IMGFMT_P010;
-    if (is_nv15)
-        *is_nv15 = b->nv15;
+    if (is_nv15) {
+        const char *subfmt = mp_imgfmt_to_name(src->hw_subfmt);
+        *is_nv15 = subfmt && strcmp(subfmt, "yuv420p10") == 0 &&
+                   b->mapper->dst_params.imgfmt == IMGFMT_P010;
+    }
     return true;
 }
 
@@ -352,8 +417,7 @@ int orp5_hwdec_bridge_map(struct orp5_hwdec_bridge *b, struct mp_image *img)
 {
     if (!b->mapper)
         return -1;
-    if (!b->nv15)
-        destroy_wrapped_textures(b);
+    destroy_wrapped_textures(b);
     return ra_hwdec_mapper_map(b->mapper, img);
 }
 
@@ -361,8 +425,7 @@ void orp5_hwdec_bridge_unmap(struct orp5_hwdec_bridge *b)
 {
     if (!b->mapper)
         return;
-    if (!b->nv15)
-        destroy_wrapped_textures(b);
+    destroy_wrapped_textures(b);
     ra_hwdec_mapper_unmap(b->mapper);
 }
 
@@ -386,6 +449,7 @@ pl_tex orp5_hwdec_bridge_tex(struct orp5_hwdec_bridge *b, int plane)
 }
 ''')
 
+# Queue release callbacks must run before their mapper/context is destroyed.
 replace_once(
     "video/out/gpu_next/video.c",
     """    orp5_hwdec_bridge_destroy(&p->hwdec_bridge);
