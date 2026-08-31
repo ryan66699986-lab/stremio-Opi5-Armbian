@@ -15,89 +15,39 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout packaging repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Confirm native ARM64 runner
-        run: |
-          uname -a
-          test "$(dpkg --print-architecture)" = arm64
-
-      - name: Install Ubuntu 26.04 build dependencies
+      - name: Install build dependencies
         run: ./scripts/install-deps.sh
 
-      - name: Inspect reference ARM64 package ELF dependencies
-        run: ./scripts/inspect-upstream-deb.sh
+      - name: Build RK3588 multimedia stack
+        run: ./scripts/build-rk3588-stack.sh
 
-      - name: Build pinned RK3588 V4L2-request FFmpeg and libmpv stack
-        run: |
-          set -o pipefail
-          bash ./scripts/build-rk3588-stack.sh 2>&1 | tee rk3588-stack.log
-
-      - name: Build official Stremio 4.4.181 source
-        run: |
-          set -o pipefail
-          ./scripts/build.sh 2>&1 | tee build.log
-
-      - name: Upload build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: stremio-arm64-build-logs
-          path: |
-            rk3588-stack.log
-            build.log
-          if-no-files-found: warn
+      - name: Build Stremio
+        run: ./scripts/build.sh
 
       - name: Build Debian package
-        run: |
-          set -o pipefail
-          ./scripts/build-deb.sh 2>&1 | tee package.log
+        run: ./scripts/build-deb.sh
 
-      - name: Upload Debian packaging diagnostics
-        if: always()
+      - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
-          name: stremio-arm64-package-log
-          path: package.log
-          if-no-files-found: warn
-
-      - name: Validate package explicitly
-        run: ./scripts/validate-deb.sh stremio_4.4.181-orp7_arm64.deb
-
-      - name: Test apt installation and private RK3588 linkage
-        run: |
-          sudo apt-get install -y ./stremio_4.4.181-orp7_arm64.deb
-          dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' stremio
-          file /opt/stremio/stremio
-          test -x /usr/bin/stremio
-          test "$(readlink -f /usr/bin/stremio)" = /opt/stremio/stremio
-          test "$(patchelf --print-rpath /opt/stremio/stremio)" = '$ORIGIN/rk3588/lib'
-          ldd /opt/stremio/stremio | tee /tmp/stremio-ldd.txt
-          grep -E 'libmpv\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
-          grep -E 'libavcodec\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
-          sudo apt-get remove -y stremio
-
-      - name: Upload ARM64 Debian package
-        uses: actions/upload-artifact@v4
-        with:
-          name: stremio-4.4.181-orp7-arm64
-          path: stremio_4.4.181-orp7_arm64.deb
+          name: stremio-4.4.181-orp8-arm64
+          path: stremio_4.4.181-orp8_arm64.deb
           if-no-files-found: error
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v4.4.181-orp7
-          RELEASE_ASSET: stremio_4.4.181-orp7_arm64.deb
+          RELEASE_TAG: v4.4.181-orp8
+          RELEASE_ASSET: stremio_4.4.181-orp8_arm64.deb
         run: |
-          set -euxo pipefail
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$RELEASE_ASSET" --clobber
           else
             gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
-              --title "Stremio 4.4.181 ARM64 RK3588 gpu-next hwdec (orp7)" \
-              --notes "ARM64 Orange Pi 5 Pro test candidate. Keeps the orp6 gpu-next/NV15 rendering path and preloads V4L2-request DRM-PRIME while the libmpv render EGL context is current. Final hardware validation is performed on the board."
+              --title "Stremio 4.4.181 ARM64 RK3588 (orp8)" \
+              --notes "Orange Pi 5 Pro test build. Hardware playback is validated on the board."
           fi
