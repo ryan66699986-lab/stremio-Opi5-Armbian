@@ -32,22 +32,22 @@ jobs:
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
-          name: stremio-4.4.181-orp8-arm64
-          path: stremio_4.4.181-orp8_arm64.deb
+          name: stremio-4.4.181-orp9-arm64
+          path: stremio_4.4.181-orp9_arm64.deb
           if-no-files-found: error
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v4.4.181-orp8
-          RELEASE_ASSET: stremio_4.4.181-orp8_arm64.deb
+          RELEASE_TAG: v4.4.181-orp9
+          RELEASE_ASSET: stremio_4.4.181-orp9_arm64.deb
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$RELEASE_ASSET" --clobber
           else
             gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
-              --title "Stremio 4.4.181 ARM64 RK3588 (orp8)" \
+              --title "Stremio 4.4.181 ARM64 RK3588 (orp9)" \
               --notes "Orange Pi 5 Pro test build. Hardware playback is validated on the board."
           fi
