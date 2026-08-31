@@ -34,6 +34,8 @@ git -C "${SOURCE_DIR}" submodule update --init --recursive deps/libmpv deps/sing
 
 git -C "${SOURCE_DIR}" apply --check "${ROOT_DIR}/patches/0001-linux-modern-libmpv.patch"
 git -C "${SOURCE_DIR}" apply "${ROOT_DIR}/patches/0001-linux-modern-libmpv.patch"
+git -C "${SOURCE_DIR}" apply --check "${ROOT_DIR}/patches/0002-linux-native-gpu-next.patch"
+git -C "${SOURCE_DIR}" apply "${ROOT_DIR}/patches/0002-linux-native-gpu-next.patch"
 
 export PKG_CONFIG_PATH="${RK_LIBDIR}/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
 export LD_LIBRARY_PATH="${RK_LIBDIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
@@ -66,4 +68,4 @@ if ! patchelf --print-rpath "${BUILD_DIR}/stremio" | grep -qx '\$ORIGIN/rk3588/l
   exit 1
 fi
 
-echo "Built Stremio ${STREMIO_VERSION} from ${STREMIO_SOURCE_COMMIT} against RK3588 V4L2-request libmpv"
+echo "Built Stremio ${STREMIO_VERSION} from ${STREMIO_SOURCE_COMMIT} against native RK3588 gpu-next libmpv"
