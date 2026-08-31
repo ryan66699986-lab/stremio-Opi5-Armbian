@@ -75,6 +75,11 @@ grep -F "${PREFIX_DIR}/lib" /tmp/rk-libavutil-libs.txt
 
 echo "==> Building pinned mpv/libmpv V4L2-request stack"
 clone_pinned "$RK_MPV_REPOSITORY" "$RK_MPV_COMMIT" "$MPV_DIR"
+(
+  cd "$MPV_DIR"
+  git apply --check "${ROOT_DIR}/patches/0002-mpv-drm-nv15-copyback.patch"
+  git apply "${ROOT_DIR}/patches/0002-mpv-drm-nv15-copyback.patch"
+)
 clone_pinned "$RK_LIBPLACEBO_REPOSITORY" "$RK_LIBPLACEBO_COMMIT" "$MPV_DIR/subprojects/libplacebo"
 git -C "$MPV_DIR/subprojects/libplacebo" submodule update --init --recursive
 
@@ -135,5 +140,5 @@ EOF
 
 echo "RK3588 stack built:"
 echo "  FFmpeg: ${RK_FFMPEG_COMMIT}"
-echo "  mpv: ${RK_MPV_COMMIT}"
+echo "  mpv: ${RK_MPV_COMMIT} + NV15 copyback patch"
 echo "  prefix: ${PREFIX_DIR}"
