@@ -23,9 +23,6 @@ jobs:
       - name: Build RK3588 multimedia stack
         run: ./scripts/build-rk3588-stack.sh
 
-      - name: Build Stremio
-        run: ./scripts/build.sh
-
       - name: Build Debian package
         run: ./scripts/build-deb.sh
 
