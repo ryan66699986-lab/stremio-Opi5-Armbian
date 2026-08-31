@@ -1,0 +1,188 @@
+diff --git a/video/mp_image_pool.c b/video/mp_image_pool.c
+index 0830bcd2..bce7d1b1 100644
+--- a/video/mp_image_pool.c
++++ b/video/mp_image_pool.c
+@@ -17,14 +17,21 @@
+ #include "config.h"
+ 
+ #include <stddef.h>
+ #include <stdbool.h>
+ #include <assert.h>
++#include <stdint.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++
++#include <linux/dma-buf.h>
++#include <drm_fourcc.h>
+ 
+ #include <libavutil/buffer.h>
+ #include <libavutil/hwcontext.h>
++#include <libavutil/hwcontext_drm.h>
+ #if HAVE_D3D11
+ #include <libavutil/hwcontext_d3d11va.h>
+ #endif
+@@ -257,6 +264,143 @@ void mp_image_pool_set_lru(struct mp_image_pool *pool)
+     pool->use_lru = true;
+ }
+ 
++static bool mp_image_is_drm_nv15(struct mp_image *src)
++{
++    if (!src || !src->hwctx)
++        return false;
++
++    AVHWFramesContext *fctx = (void *)src->hwctx->data;
++    if (!fctx || fctx->format != AV_PIX_FMT_DRM_PRIME)
++        return false;
++
++    AVFrame *frame = mp_image_to_av_frame(src);
++    if (!frame)
++        return false;
++
++    const AVDRMFrameDescriptor *desc =
++        frame->data[0] ? (const AVDRMFrameDescriptor *)frame->data[0] : NULL;
++    bool is_nv15 = desc && desc->nb_layers == 1 &&
++                   desc->layers[0].format == DRM_FORMAT_NV15 &&
++                   desc->layers[0].nb_planes == 2;
++
++    av_frame_free(&frame);
++    return is_nv15;
++}
++
++static bool unpack_nv15_plane(uint8_t *dst, ptrdiff_t dst_stride,
++                              const uint8_t *src, ptrdiff_t src_stride,
++                              int samples, int rows)
++{
++    if (!dst || !src || samples < 1 || rows < 1)
++        return false;
++
++    size_t packed_row = ((size_t)samples + 3) / 4 * 5;
++    if (src_stride < (ptrdiff_t)packed_row ||
++        dst_stride < (ptrdiff_t)samples * 2)
++        return false;
++
++    for (int y = 0; y < rows; y++) {
++        const uint8_t *s = src + (ptrdiff_t)y * src_stride;
++        uint16_t *d = (uint16_t *)(dst + (ptrdiff_t)y * dst_stride);
++
++        for (int x = 0; x < samples; x += 4) {
++            uint64_t packed = (uint64_t)s[0] |
++                              (uint64_t)s[1] << 8 |
++                              (uint64_t)s[2] << 16 |
++                              (uint64_t)s[3] << 24 |
++                              (uint64_t)s[4] << 32;
++            int count = samples - x < 4 ? samples - x : 4;
++            for (int n = 0; n < count; n++)
++                d[x + n] = ((packed >> (n * 10)) & 0x3ffu) << 6;
++            s += 5;
++        }
++    }
++
++    return true;
++}
++
++static struct mp_image *mp_image_hw_download_nv15(struct mp_image *src,
++                                                   struct mp_image_pool *swpool)
++{
++    AVHWFramesContext *fctx = (void *)src->hwctx->data;
++    int p010 = pixfmt2imgfmt(AV_PIX_FMT_P010LE);
++    if (!fctx || !p010)
++        return NULL;
++
++    struct mp_image *dst =
++        mp_image_pool_get(swpool, p010, fctx->width, fctx->height);
++    if (!dst)
++        return NULL;
++
++    AVFrame *frame = mp_image_to_av_frame(src);
++    if (!frame)
++        goto fail;
++
++    const AVDRMFrameDescriptor *desc =
++        frame->data[0] ? (const AVDRMFrameDescriptor *)frame->data[0] : NULL;
++    if (!desc || desc->nb_layers != 1 ||
++        desc->layers[0].format != DRM_FORMAT_NV15 ||
++        desc->layers[0].nb_planes != 2)
++        goto fail_frame;
++
++    const AVDRMLayerDescriptor *layer = &desc->layers[0];
++    for (int n = 0; n < 2; n++) {
++        const AVDRMPlaneDescriptor *plane = &layer->planes[n];
++        if (plane->object_index < 0 || plane->object_index >= desc->nb_objects)
++            goto fail_frame;
++
++        const AVDRMObjectDescriptor *object =
++            &desc->objects[plane->object_index];
++        if (object->format_modifier != DRM_FORMAT_MOD_LINEAR &&
++            object->format_modifier != DRM_FORMAT_MOD_INVALID)
++            goto fail_frame;
++
++        int rows = n ? (fctx->height + 1) / 2 : fctx->height;
++        size_t packed_row = ((size_t)fctx->width + 3) / 4 * 5;
++        if (object->size == 0 || plane->pitch < packed_row ||
++            (size_t)plane->offset > object->size ||
++            (size_t)plane->offset + (size_t)(rows - 1) * plane->pitch +
++                packed_row > object->size)
++            goto fail_frame;
++
++        struct dma_buf_sync sync = {
++            .flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ,
++        };
++        ioctl(object->fd, DMA_BUF_IOCTL_SYNC, &sync);
++
++        void *map = mmap(NULL, object->size, PROT_READ, MAP_SHARED,
++                         object->fd, 0);
++        if (map == MAP_FAILED) {
++            sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ;
++            ioctl(object->fd, DMA_BUF_IOCTL_SYNC, &sync);
++            goto fail_frame;
++        }
++
++        bool ok = unpack_nv15_plane(dst->planes[n], dst->stride[n],
++                                    (const uint8_t *)map + plane->offset,
++                                    plane->pitch, fctx->width, rows);
++        munmap(map, object->size);
++
++        sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ;
++        ioctl(object->fd, DMA_BUF_IOCTL_SYNC, &sync);
++
++        if (!ok)
++            goto fail_frame;
++    }
++
++    av_frame_free(&frame);
++    mp_image_set_size(dst, src->w, src->h);
++    mp_image_copy_attributes(dst, src);
++    return dst;
++
++fail_frame:
++    av_frame_free(&frame);
++fail:
++    talloc_free(dst);
++    return NULL;
++}
++
+ // Return the sw image format mp_image_hw_download() would use. This can be
+ // different from src->params.hw_subfmt in obscure cases.
+ int mp_image_hw_download_get_sw_format(struct mp_image *src)
+@@ -265,6 +409,10 @@ int mp_image_hw_download_get_sw_format(struct mp_image *src)
+     if (!src->hwctx)
+         return 0;
+ 
++    // RK3588 V4L2-request exposes 10-bit output as linear DRM NV15. FFmpeg
++    // intentionally has no generic software transfer format for NV15.
++    if (mp_image_is_drm_nv15(src))
++        return pixfmt2imgfmt(AV_PIX_FMT_P010LE);
++
+     // Try to find the first format which we can apparently use.
+     int imgfmt = 0;
+     enum AVPixelFormat *fmts;
+@@ -286,6 +434,9 @@ struct mp_image *mp_image_hw_download(struct mp_image *src,
+                                       struct mp_image_pool *swpool)
+ {
++    if (mp_image_is_drm_nv15(src))
++        return mp_image_hw_download_nv15(src, swpool);
++
+     int imgfmt = mp_image_hw_download_get_sw_format(src);
+     if (!imgfmt)
+         return NULL;
