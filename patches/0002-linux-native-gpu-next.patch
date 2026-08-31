@@ -1,0 +1,118 @@
+From: stremio-Opi5-Armbian maintainers
+Subject: [PATCH] Linux: let mpv own the RK3588 gpu-next video window
+
+Do not reimplement vo_gpu_next inside libmpv's render API. Keep Stremio's
+existing libmpv handle for commands, properties and events, but let mpv use
+its normal gpu-next VO and native video window. This preserves the tested
+Rockchip NV15/V4L2-request renderer without downstream DMA-BUF/render glue.
+
+Also enable mpv's supported SDL2 gamepad input and load the package-owned
+controller bindings.
+---
+ main.qml |  1 +
+ mpv.cpp  | 64 ++++++++++------------------------------------------------------
+ 2 files changed, 11 insertions(+), 54 deletions(-)
+
+diff --git a/main.qml b/main.qml
+index 6199cd1..0000000 100644
+--- a/main.qml
++++ b/main.qml
+@@ -125,6 +125,7 @@ ApplicationWindow {
+     // Utilities
+     function onWindowMode(mode) {
+         shouldDisableScreensaver(mode === "player")
++        mpv.setProperty("fullscreen", mode === "player")
+     }
+ 
+     function wakeupEvent() {
+diff --git a/mpv.cpp b/mpv.cpp
+index 06fc4c4..0000000 100644
+--- a/mpv.cpp
++++ b/mpv.cpp
+@@ -50,54 +50,13 @@ class MpvRenderer : public QQuickFramebufferObject::Renderer
+     // This function is called when a new FBO is needed.
+     // This happens on the initial frame.
+     QOpenGLFramebufferObject *createFramebufferObject(const QSize &size)
+     {
+-        // init mpv_gl:
+-        if (!obj->mpv_gl)
+-        {
+-            mpv_opengl_init_params gl_init_params{get_proc_address_mpv, nullptr};
+-            mpv_render_param params[]{
+-                {MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
+-                {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
+-                {MPV_RENDER_PARAM_INVALID, nullptr}};
+-
+-            if (mpv_render_context_create(&obj->mpv_gl, obj->mpv, params) < 0)
+-                throw std::runtime_error("failed to initialize mpv GL context");
+-            mpv_render_context_set_update_callback(obj->mpv_gl, on_mpv_redraw, obj);
+-        }
+-
++        // Video is rendered by mpv's native gpu-next window. Keep this QML
++        // item inert so the web UI can continue to use the same MpvObject API.
+         return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
+     }
+ 
+     void render()
+     {
+-        obj->window()->resetOpenGLState();
+-
+-        QOpenGLFramebufferObject *fbo = framebufferObject();
+-        mpv_opengl_fbo mpfbo{static_cast<int>(fbo->handle()), fbo->width(), fbo->height(), 0};
+-        int flip_y{0};
+-
+-        mpv_render_param params[] = {
+-            // Specify the default framebuffer (0) as target. This will
+-            // render onto the entire screen. If you want to show the video
+-            // in a smaller rectangle or apply fancy transformations, you'll
+-            // need to render into a separate FBO and draw it manually.
+-            {MPV_RENDER_PARAM_OPENGL_FBO, &mpfbo},
+-            // Flip rendering (needed due to flipped GL coordinate system).
+-            {MPV_RENDER_PARAM_FLIP_Y, &flip_y},
+-            {MPV_RENDER_PARAM_INVALID, nullptr}};
+-        // See render_gl.h on what OpenGL environment mpv expects, and
+-        // other API details.
+-        mpv_render_context_render(obj->mpv_gl, params);
+-
+-        obj->window()->resetOpenGLState();
++        // Intentionally empty: mpv presents the video through vo=gpu-next.
+      }
+ };
+@@ -128,17 +87,20 @@ void MpvObject::initialize_mpv() {
+     // terminal=yes brings us all the terminal logs; on windows it's much better with winpty (https://github.com/mpv-player/mpv/blob/master/DOCS/compile-windows.md)
+     mpv_set_option_string(mpv, "terminal", "yes");
+     mpv_set_option_string(mpv, "msg-level", "all=v");
++
++    // Use mpv's supported native renderer instead of the libmpv render API.
++    // The pinned Rockchip fork implements its NV15 unpack path in vo_gpu_next.
++    mpv_set_option_string(mpv, "vo", "gpu-next");
++    mpv_set_option_string(mpv, "gpu-api", "opengl");
++    mpv_set_option_string(mpv, "input-gamepad", "yes");
++    mpv_set_option_string(mpv, "input-conf", "/opt/stremio/rk3588/input.conf");
+ 
+     if (mpv_initialize(mpv) < 0)
+         throw std::runtime_error("could not initialize mpv context");
+ 
+-    // Make use of the MPV_SUB_API_OPENGL_CB API.
+-    mpv::qt::set_property(mpv, "vo", "libmpv");
+-
+-    // Enable opengl-hwdec-interop so we can set hwdec at runtime
+-    mpv::qt::set_property(mpv, "gpu-hwdec-interop", "auto");
+-
+-    // No need to set, will be auto-detected
+-    //mpv::qt::set_property(mpv, "opengl-backend", "angle");
++    // The web UI still sends legacy render-API properties. setProperty()
++    // translates or ignores those while leaving gpu-next selected.
+ 
+     // Modern mpv removed cache-default/cache-backbuffer.
+     mpv::qt::set_property(mpv, "demuxer-max-bytes", "150MiB");
+@@ -180,7 +142,7 @@ void MpvObject::setProperty(const QString& name, const QVariant& value)
+ {
+     if (name == "vo" && value.toString() == "opengl-cb") {
+-        mpv::qt::set_property(mpv, "vo", "libmpv");
++        // Stremio 4 emits the removed opengl-cb VO name. Keep native gpu-next.
+         return;
+     }
+     if (name == "input-defalt-bindings") {
+-- 
+2.43.0
