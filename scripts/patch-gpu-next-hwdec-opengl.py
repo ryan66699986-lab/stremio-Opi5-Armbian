@@ -385,3 +385,23 @@ pl_tex orp5_hwdec_bridge_tex(struct orp5_hwdec_bridge *b, int plane)
     return b->wrapped[plane];
 }
 ''')
+
+replace_once(
+    "video/out/gpu_next/video.c",
+    """    orp5_hwdec_bridge_destroy(&p->hwdec_bridge);
+    for (int i = 0; i < ORP5_NV15_TEX_POOL_SIZE; i++) {
+        for (int n = 0; n < 2; n++)
+            pl_tex_destroy(p->ra->gpu, &p->nv15_pool[i].planes[n]);
+    }
+    pl_dispatch_destroy(&p->nv15_dispatch);
+    ra_next_queue_destroy(&p->queue);
+""",
+    """    ra_next_queue_destroy(&p->queue);
+    orp5_hwdec_bridge_destroy(&p->hwdec_bridge);
+    for (int i = 0; i < ORP5_NV15_TEX_POOL_SIZE; i++) {
+        for (int n = 0; n < 2; n++)
+            pl_tex_destroy(p->ra->gpu, &p->nv15_pool[i].planes[n]);
+    }
+    pl_dispatch_destroy(&p->nv15_dispatch);
+""",
+)
