@@ -1,3 +1,11 @@
+stremio (4.4.181-orp10) resolute; urgency=medium
+
+  * Keep the tested RK3588 V4L2-request FFmpeg/mpv stack unchanged.
+  * Let mpv render through its native gpu-next VO instead of a custom libmpv renderer bridge.
+  * Enable mpv's supported SDL2 gamepad backend with package-owned controller bindings.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Mon, 31 Aug 2026 20:30:00 +0100
+
 stremio (4.4.181-orp2) resolute; urgency=medium
 
   * Bundle a private pinned FFmpeg/libmpv stack under /opt/stremio/rk3588.
