@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $(dpkg --print-architecture) != arm64 ]]; then
-  echo "error: this project builds natively for arm64; current dpkg architecture is $(dpkg --print-architecture)" >&2
+  echo "error: native arm64 build required" >&2
   exit 1
 fi
 
@@ -14,10 +14,8 @@ sudo apt-get install -y \
   cmake \
   curl \
   debhelper \
-  devscripts \
   dpkg-dev \
   fakeroot \
-  file \
   git \
   libasound2-dev \
   libass-dev \
