@@ -28,7 +28,6 @@ git clone https://github.com/ryan66699986-lab/stremio-Opi5-Armbian.git
 cd stremio-Opi5-Armbian
 ./scripts/install-deps.sh
 ./scripts/build-rk3588-stack.sh
-./scripts/build.sh
 ./scripts/build-deb.sh
 ```
 
