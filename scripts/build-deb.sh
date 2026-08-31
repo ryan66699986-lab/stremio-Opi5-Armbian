@@ -28,6 +28,7 @@ cp -a "${ROOT_DIR}/debian" "${SOURCE_DIR}/debian"
 mkdir -p "${SOURCE_DIR}/rk3588-stack"
 cp -a "${RK_STAGE}/include" "${SOURCE_DIR}/rk3588-stack/include"
 cp -a "${RK_STAGE}/lib" "${SOURCE_DIR}/rk3588-stack/lib"
+cp "${ROOT_DIR}/config/mpv-input.conf" "${SOURCE_DIR}/mpv-input.conf"
 
 curl --fail --location --proto '=https' --tlsv1.2 \
   --output "${SOURCE_DIR}/server.js" "${STREMIO_SERVER_URL}"
