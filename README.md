@@ -6,18 +6,24 @@ The package keeps its RK3588 FFmpeg/libmpv stack private under `/opt/stremio/rk3
 
 ## Current test build
 
-`4.4.181-orp8`
+`4.4.181-orp9`
 
-`orp8` keeps the parts already proven on the board:
+`orp8` reached V4L2-request hardware decode on the Orange Pi 5 Pro but crashed on the first 4K HEVC Main10 DRM-PRIME frame. The concrete mismatch was in the NV15 OpenGL import path: Stremio's Qt render context is desktop OpenGL and exposes `GL_EXT_EGL_image_storage`, while the NV15 special case still used the OES-only EGLImage texture binding.
+
+`orp9` keeps the previously exercised path and changes that NV15 import to use `glEGLImageTargetTexStorageEXT` on desktop OpenGL. Wrapped NV15 textures are recreated per mapped frame because EXT image storage is immutable.
+
+The candidate includes:
 
 - Stremio gpu-next rendering;
 - V4L2-request decoding through `rkvdec`;
 - DRM-PRIME hardware frames;
-- EGL DMA-BUF import on the Qt/OpenGL context;
+- EGL DMA-BUF import on the Qt desktop-OpenGL context;
 - RK3588 Main10/NV15 GPU unpacking;
-- render-thread hwdec preload.
+- render-thread hwdec preload;
+- the single shared hwdec mapper used by `orp8`;
+- desktop-OpenGL NV15 binding through `GL_EXT_EGL_image_storage`.
 
-It removes the extra per-frame hwdec mapper layer and uses one mapper like the working Rockchip `vo_gpu_next` path.
+**`orp9` is not board-approved yet. Do not merge PR #5 until the physical acceptance test below passes.**
 
 ## Build
 
@@ -35,7 +41,7 @@ cd stremio-Opi5-Armbian
 Output:
 
 ```text
-stremio_4.4.181-orp8_arm64.deb
+stremio_4.4.181-orp9_arm64.deb
 ```
 
 Pinned source revisions are in `upstream.env`.
@@ -45,25 +51,26 @@ Pinned source revisions are in `upstream.env`.
 ```bash
 sudo apt purge stremio -y
 sudo rm -rf /opt/stremio
-sudo apt install ./stremio_4.4.181-orp8_arm64.deb
+sudo apt install ./stremio_4.4.181-orp9_arm64.deb
 ```
 
 Run from a terminal when testing:
 
 ```bash
-stremio 2>&1 | tee ~/stremio-orp8.log
+stremio 2>&1 | tee ~/stremio-orp9.log
 ```
 
 ## Board acceptance
 
-Use the same 4K HEVC Main10 stream used for previous tests.
+Use the same 3840x2160 HEVC Main10 Dolby Vision/BT.2020/PQ stream used for the previous tests.
 
-The build passes when:
+The build passes only when:
 
-1. video plays normally with no green corruption or crash;
-2. the log contains `Using hardware decoding (v4l2request)`.
+1. playback starts and continues normally without green corruption or a crash;
+2. the log contains `Using hardware decoding (v4l2request)`;
+3. the renderer no longer fails on the first DRM-PRIME/NV15 frame.
 
-The physical Orange Pi test is the playback authority. CI only builds the ARM64 package.
+CI validates the ARM64 package and the private RK3588 multimedia linkage, but the physical Orange Pi test remains the playback authority.
 
 ## License
 
