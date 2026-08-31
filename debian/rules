@@ -18,6 +18,7 @@ override_dh_auto_install:
 	install -Dm644 images/stremio.svg debian/stremio/usr/share/icons/hicolor/scalable/apps/smartcode-stremio.svg
 	mkdir -p debian/stremio/opt/stremio/rk3588/lib
 	cp -a rk3588-stack/lib/. debian/stremio/opt/stremio/rk3588/lib/
+	install -Dm644 mpv-input.conf debian/stremio/opt/stremio/rk3588/input.conf
 
 override_dh_strip:
 	# The private RK3588 stack is installed from release builds and has already
