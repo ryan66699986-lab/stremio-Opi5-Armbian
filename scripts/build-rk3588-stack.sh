@@ -89,7 +89,7 @@ test -f "$MPV_DIR/video/out/gpu_next/libmpv_gpu_next.c"
 # orp5 restores the hwdec side that the draft libmpv gpu-next backend does not
 # implement upstream: V4L2-request device loading, DRM-PRIME DMA-BUF mapping,
 # and RK3588 NV15 GPU unpacking into libplacebo-compatible 10-bit planes.
-echo "==> Applying orp5 libmpv gpu-next RK3588 hwdec bridge"
+echo "==> Applying libmpv gpu-next RK3588 hwdec bridge"
 python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec.py" "$MPV_DIR"
 # libplacebo's queue can retain multiple mapped source frames. Do not share one
 # mpv ra_hwdec_mapper across those queue entries: mapping a new image unmaps the
@@ -97,13 +97,21 @@ python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec.py" "$MPV_DIR"
 python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec-frame-lifetime.py" "$MPV_DIR"
 # Queue entries can span a resolution transition, so size the NV15 unpack target
 # from the acquired frame rather than mutable engine-global current_params.
+# This script also installs the orp6 legacy OpenGL/EGL texture bridge.
 python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec-frame-geometry.py" "$MPV_DIR"
+# In libmpv the decoder can request hwdec from a thread where Qt's EGL context
+# is not current. Preload DRM-PRIME/V4L2-request while the render context is
+# being created, matching the context-thread requirement of dmabuf_interop_gl.
+python3 "${ROOT_DIR}/scripts/patch-gpu-next-hwdec-preload.py" "$MPV_DIR"
 # The pinned libplacebo dispatch API expects its own pl_log, not mpv's mp_log.
 sed -i 's/pl_dispatch_create(ra->log, ra->gpu)/pl_dispatch_create(ra->gpu->log, ra->gpu)/' \
   "$MPV_DIR/video/out/gpu_next/video.c"
 grep -q 'orp5: libmpv gpu-next hwdec bridge enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
 grep -q 'orp5: per-frame hwdec mapper lifetime enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
-grep -q 'supports_nv15_byte_planes = true' "$MPV_DIR/video/out/hwdec/dmabuf_interop_pl.c"
+grep -q 'orp6: EGL/OpenGL DMA-BUF hwdec interop enabled' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
+grep -q 'orp7: V4L2-request DRM-PRIME hwdec preloaded on render/EGL thread' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
+grep -q 'AV_HWDEVICE_TYPE_V4L2REQUEST' "$MPV_DIR/video/out/gpu_next/hwdec_compat.c"
+grep -q 'supports_nv15_byte_planes = true' "$MPV_DIR/video/out/hwdec/dmabuf_interop_gl.c"
 grep -q 'struct mp_image \*mpi = frame->user_data;' "$MPV_DIR/video/out/gpu_next/video.c"
 grep -q 'mpi->params.w / 2' "$MPV_DIR/video/out/gpu_next/video.c"
 grep -q 'pl_dispatch_create(ra->gpu->log, ra->gpu)' "$MPV_DIR/video/out/gpu_next/video.c"
@@ -162,6 +170,8 @@ strings "$LIBMPV_REAL" | grep -q 'v4l2request'
 strings "$LIBMPV_REAL" | grep -q 'gpu-next'
 strings "$LIBMPV_REAL" | grep -q 'orp5: libmpv gpu-next hwdec bridge enabled'
 strings "$LIBMPV_REAL" | grep -q 'orp5: per-frame hwdec mapper lifetime enabled'
+strings "$LIBMPV_REAL" | grep -q 'orp6: EGL/OpenGL DMA-BUF hwdec interop enabled'
+strings "$LIBMPV_REAL" | grep -q 'orp7: V4L2-request DRM-PRIME hwdec preloaded on render/EGL thread'
 strings "$LIBMPV_REAL" | grep -q 'unpacked NV15 with libplacebo GPU dispatch'
 
 cat >"${WORK_ROOT}/stack.env" <<EOF
@@ -175,5 +185,5 @@ echo "RK3588 stack built:"
 echo "  FFmpeg: ${RK_FFMPEG_COMMIT}"
 echo "  mpv: ${RK_MPV_COMMIT}"
 echo "  libmpv gpu-next: ${RK_MPV_GPU_NEXT_COMMIT}"
-echo "  orp5 hwdec bridge: enabled (per-frame mapper lifetime)"
+echo "  RK3588 hwdec bridge: EGL DMA-BUF + per-frame mappers + render-thread V4L2-request preload"
 echo "  prefix: ${PREFIX_DIR}"
