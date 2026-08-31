@@ -57,7 +57,7 @@ for marker in \
   'GL_EXT_EGL_image_storage' \
   'glEGLImageTargetTexStorageEXT' \
   'NV15 luma unpack'; do
-  strings "$LIBMPV_REAL" | grep -Fq "$marker" || {
+  grep -aFq "$marker" "$LIBMPV_REAL" || {
     echo "error: private libmpv is missing expected renderer marker: $marker" >&2
     exit 1
   }
