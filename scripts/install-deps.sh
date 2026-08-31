@@ -32,6 +32,7 @@ sudo apt-get install -y \
   libpulse-dev \
   libqt5opengl5-dev \
   libqt5webchannel5-dev \
+  libsdl2-dev \
   libssl-dev \
   libudev-dev \
   libvulkan-dev \
