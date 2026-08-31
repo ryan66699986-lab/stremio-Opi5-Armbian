@@ -94,6 +94,7 @@ meson setup "${MPV_DIR}/build" "$MPV_DIR" \
   -Dhtml-build=disabled \
   -Dpdf-build=disabled \
   -Dv4l2request=enabled \
+  -Dsdl2-gamepad=enabled \
   -Ddrm=enabled \
   -Degl=enabled \
   -Dplain-gl=enabled \
