@@ -1,3 +1,11 @@
+stremio (4.4.181-orp7) resolute; urgency=medium
+
+  * Keep the orp6 gpu-next/NV15 rendering path unchanged.
+  * Preload the V4L2-request DRM-PRIME device while the libmpv render EGL context is current.
+  * Avoid re-probing the same DRM-PRIME interop from the decoder thread once that device exists.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Mon, 31 Aug 2026 08:00:00 +0100
+
 stremio (4.4.181-orp6) resolute; urgency=medium
 
   * Keep the gpu-next NV15 unpack path that eliminated the green 4K output.

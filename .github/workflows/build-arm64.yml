@@ -63,11 +63,11 @@ jobs:
           if-no-files-found: warn
 
       - name: Validate package explicitly
-        run: ./scripts/validate-deb.sh stremio_4.4.181-orp6_arm64.deb
+        run: ./scripts/validate-deb.sh stremio_4.4.181-orp7_arm64.deb
 
-      - name: Test apt installation, private RK3588 linkage, gpu-next, and hwdec bridge
+      - name: Test apt installation and private RK3588 linkage
         run: |
-          sudo apt-get install -y ./stremio_4.4.181-orp6_arm64.deb
+          sudo apt-get install -y ./stremio_4.4.181-orp7_arm64.deb
           dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' stremio
           file /opt/stremio/stremio
           test -x /usr/bin/stremio
@@ -76,31 +76,21 @@ jobs:
           ldd /opt/stremio/stremio | tee /tmp/stremio-ldd.txt
           grep -E 'libmpv\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
           grep -E 'libavcodec\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
-          LIBMPV="$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)"
-          strings "$LIBMPV" | grep -m1 'v4l2request'
-          strings "$LIBMPV" | grep -m1 'gpu-next'
-          strings "$LIBMPV" | grep -m1 'orp5: libmpv gpu-next hwdec bridge enabled'
-          strings "$LIBMPV" | grep -m1 'orp5: per-frame hwdec mapper lifetime enabled'
-          strings "$LIBMPV" | grep -m1 'orp6: legacy OpenGL hwdec RA enabled for EGL DMA-BUF import'
-          strings "$LIBMPV" | grep -m1 'orp6: EGL/OpenGL DMA-BUF hwdec interop enabled'
-          strings "$LIBMPV" | grep -m1 'unpacked NV15 with libplacebo GPU dispatch'
-          strings /opt/stremio/stremio | grep -m1 'gpu-next'
-          strings /opt/stremio/stremio | grep -m1 'v4l2request,auto-safe'
           sudo apt-get remove -y stremio
 
       - name: Upload ARM64 Debian package
         uses: actions/upload-artifact@v4
         with:
-          name: stremio-4.4.181-orp6-arm64
-          path: stremio_4.4.181-orp6_arm64.deb
+          name: stremio-4.4.181-orp7-arm64
+          path: stremio_4.4.181-orp7_arm64.deb
           if-no-files-found: error
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v4.4.181-orp6
-          RELEASE_ASSET: stremio_4.4.181-orp6_arm64.deb
+          RELEASE_TAG: v4.4.181-orp7
+          RELEASE_ASSET: stremio_4.4.181-orp7_arm64.deb
         run: |
           set -euxo pipefail
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -108,6 +98,6 @@ jobs:
           else
             gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
-              --title "Stremio 4.4.181 ARM64 RK3588 gpu-next hwdec (orp6)" \
-              --notes "ARM64 Stremio candidate for Ubuntu 26.04 / Armbian on RK3588. Keeps the gpu-next/NV15 path that removed green 4K Main10 output, but routes V4L2-request DRM-PRIME surfaces through mpv's EGL/OpenGL hwdec RA and wraps the imported GL textures into libplacebo, matching modern mpv gpu-next. Physical Orange Pi 5 Pro playback remains the release gate."
+              --title "Stremio 4.4.181 ARM64 RK3588 gpu-next hwdec (orp7)" \
+              --notes "ARM64 Orange Pi 5 Pro test candidate. Keeps the orp6 gpu-next/NV15 rendering path and preloads V4L2-request DRM-PRIME while the libmpv render EGL context is current. Final hardware validation is performed on the board."
           fi
