@@ -1,3 +1,11 @@
+stremio (4.4.181-orp9) resolute; urgency=medium
+
+  * Keep the working V4L2-request hardware decode and gpu-next NV15 path.
+  * Use GL_EXT_EGL_image_storage for NV15 on Stremio's desktop OpenGL context.
+  * Recreate wrapped NV15 textures per mapped frame so immutable GL storage is not reused.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Mon, 31 Aug 2026 12:00:00 +0100
+
 stremio (4.4.181-orp8) resolute; urgency=medium
 
   * Keep the working V4L2-request preload and RK3588 NV15 path.
