@@ -30,6 +30,8 @@ echo "==> Building pinned FFmpeg V4L2-request stack"
 clone_pinned "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_COMMIT" "$FFMPEG_DIR"
 (
   cd "$FFMPEG_DIR"
+  git apply --check "$ROOT_DIR/patches/0002-ffmpeg-v4l2request-nv15-copyback.patch"
+  git apply "$ROOT_DIR/patches/0002-ffmpeg-v4l2request-nv15-copyback.patch"
   ./configure \
     --prefix="$RK_STACK_PREFIX" \
     --libdir="$RK_STACK_PREFIX/lib" \
