@@ -28,6 +28,8 @@ clone_pinned() {
 
 echo "==> Building pinned FFmpeg V4L2-request stack"
 clone_pinned "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_COMMIT" "$FFMPEG_DIR"
+git -C "$FFMPEG_DIR" apply "${ROOT_DIR}/patches/0002-ffmpeg-v4l2request-nv15-pad-capture-width.patch"
+grep -q 'V4L2 Request NV15 capture layout' "${FFMPEG_DIR}/libavutil/hwcontext_v4l2request.c"
 (
   cd "$FFMPEG_DIR"
   ./configure \
