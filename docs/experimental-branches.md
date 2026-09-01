@@ -1,19 +1,20 @@
 # ORP branch status
 
-This repository has one supported runtime baseline and a deliberately narrow experimental boundary.
+This repository has one supported runtime baseline.
 
-## Usable builds
+## Usable build
 
 - **orp2** — current released baseline. This is the build used for real Orange Pi 5 Pro runtime testing.
-- **orp3** — the only acceptable next experiment. It is a small copy-first variation on the orp2 design and must not be treated as a release until it passes board testing.
 
 ## Research-only work
 
-**orp4 and everything derived from later gpu-next / custom copyback experiments are research-only. Do not install, merge, or use them as the runtime baseline.**
+**orp3 and everything after it are research-only. Do not install, merge, or use them as the runtime baseline.**
 
-Those branches are retained only because their diffs and failure history may be useful when diagnosing the remaining RK3588 HEVC Main10 / NV15 presentation problem. They contain substantially more custom renderer/copyback code than the accepted orp2/orp3 design.
+orp3 is retained only as historical context for the copy-first `v4l2request-copy,v4l2request,auto-safe` experiment. Later gpu-next and custom copyback branches are also retained only because their diffs and failure history may be useful when diagnosing the RK3588 HEVC Main10 / NV15 presentation problem.
 
-Closed PRs and branches beyond the orp3 cutoff should be read as historical investigation, not as candidates for deployment.
+These branches contain experimental renderer/copyback approaches and are not deployment candidates.
+
+Closed PRs and branches from orp3 onward should be read as historical investigation only.
 
 ## Runtime rule
 
