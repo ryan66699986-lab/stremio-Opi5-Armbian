@@ -4,29 +4,27 @@ Date: Tue, 1 Sep 2026 17:35:00 +0100
 Subject: [PATCH] avutil/v4l2request: request 64-byte aligned NV15 capture pitch
 
 The RK3588 V4L2 Request decoder currently negotiates tightly packed NV15
-capture buffers.  On the physical Orange Pi 5 Pro test board a 1920-wide
+capture buffers. On the physical Orange Pi 5 Pro test board a 1920-wide
 Main10 frame is exported with pitch 2400 and fails Mesa DMA-BUF import,
 while 3840-wide Main10 frames use pitch 4800 and import successfully.
 
 For NV15 CAPTURE only, ask the V4L2 driver for a 64-byte-aligned packed
-row stride.  This changes the 1920-wide request from 2400 to 2432 bytes
-and leaves 3840-wide NV15 at 4800.  NV12 and all other capture formats
-are untouched.  The driver remains authoritative: VIDIOC_S_FMT may
+row stride. This changes the 1920-wide request from 2400 to 2432 bytes
+and leaves 3840-wide NV15 at 4800. NV12 and all other capture formats
+are untouched. The driver remains authoritative: VIDIOC_S_FMT may
 adjust or reject the requested stride, and the returned format is later
 used to populate the DRM PRIME descriptor.
 
 This is an RK3588 board-test experiment, not a generic rendering
 workaround.
 ---
- libavutil/hwcontext_v4l2request.c | 27 +++++++++++++++++++++++++++
- 1 file changed, 27 insertions(+)
+ libavutil/hwcontext_v4l2request.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
 
 diff --git a/libavutil/hwcontext_v4l2request.c b/libavutil/hwcontext_v4l2request.c
-index 0000000000..0000000000 100644
 --- a/libavutil/hwcontext_v4l2request.c
 +++ b/libavutil/hwcontext_v4l2request.c
-@@ -207,6 +207,7 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
-     AVV4L2RequestFramesContextInternal *fctxi = fctx->internal;
+@@ -230,6 +230,7 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
      struct v4l2_format format = {
          .type = type,
      };
@@ -34,7 +32,7 @@ index 0000000000..0000000000 100644
  
      if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
          format.fmt.pix_mp.width = hwfc->width;
-@@ -220,9 +221,35 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
+@@ -244,8 +245,35 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
          format.fmt.pix.sizeimage = buffersize;
      }
  
@@ -42,7 +40,7 @@ index 0000000000..0000000000 100644
 +    if (pixelformat == V4L2_PIX_FMT_NV15 &&
 +        (type == V4L2_BUF_TYPE_VIDEO_CAPTURE ||
 +         type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)) {
-+        /* NV15 packs four 10-bit pixels into five bytes.  Request a real
++        /* NV15 packs four 10-bit pixels into five bytes. Request a real
 +         * 64-byte-aligned CAPTURE layout rather than changing DRM metadata
 +         * after allocation. */
 +        const uint32_t packed_bytesperline = ((hwfc->width + 3) / 4) * 5;
