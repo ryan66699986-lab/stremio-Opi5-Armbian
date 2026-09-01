@@ -1,3 +1,13 @@
+stremio (4.4.181-orp10) resolute; urgency=medium
+
+  * Experimental board-test candidate only; ORP2 remains supported.
+  * Keep the pinned ORP2 private RK3588 FFmpeg/libmpv stack unchanged.
+  * For NV15 V4L2 Request CAPTURE only, request a 256-pixel-aligned capture width.
+  * Log requested/negotiated capture width and resulting pitch for physical validation.
+  * Do not promote or merge without successful Orange Pi 5 Pro playback tests.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Tue, 01 Sep 2026 18:12:00 +0100
+
 stremio (4.4.181-orp2) resolute; urgency=medium
 
   * Bundle a private pinned FFmpeg/libmpv stack under /opt/stremio/rk3588.
