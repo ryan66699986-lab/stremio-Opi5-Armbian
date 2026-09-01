@@ -16,6 +16,22 @@ These results are important because they separate the remaining failure from dec
 
 Do not generalize one successful 4K NV15 sample to all HEVC Main10 content: the 3840-wide pitch-4800 sample imported successfully while the 1920-wide pitch-2400 sample did not.
 
+## Clean ORP3 experiment: tested and rejected
+
+A clean ORP3 candidate was built from the ORP2 baseline with one runtime change only: `vd-lavc-dr=no`. The goal was to test whether libavcodec direct rendering caused the bad NV15 allocation seen on the failing 1920x804 Main10 sample.
+
+Physical board testing rejected that hypothesis:
+
+- ORP3 was confirmed active because startup reported `Set property: vd-lavc-dr="no"`.
+- **HEVC Main10 1920x804** still hardware-decoded through `hevc-v4l2request` / `rkvdec`, still produced DRM PRIME NV15 with pitch **2400**, and still failed with `WSI pitch not properly aligned`, `Failed to import NV15 byte plane 0`, `mapping DRM dmabuf failed`, and `Mapping hardware decoded surface failed`.
+- **HEVC Main10 3840x2160** remained successful with NV15 pitch **4800**.
+- A separate **HEVC Main10 3840x1608** stream also hardware-decoded successfully and repeatedly imported NV15 with pitch **4800**.
+- **H.264 1920x804** remained successful through `h264-v4l2request` / `rkvdec`, using NV12 with pitch **1920**.
+
+Conclusion: disabling libavcodec direct rendering did not alter the failing NV15 stride and did not fix presentation. Clean ORP3 is therefore rejected as a deployment candidate. ORP2 remains the supported baseline.
+
+The extra successful 3840x1608 sample strengthens the working width/pitch diagnosis: both tested 3840-wide Main10 streams produce pitch 4800 and import successfully despite different heights, while the tested 1920-wide Main10 stream produces pitch 2400 and fails. This supports focusing future research on the NV15 DMA-BUF stride/alignment boundary rather than decoder selection or generic libmpv direct-rendering settings.
+
 ## Install and verify package layout
 
 ```bash
