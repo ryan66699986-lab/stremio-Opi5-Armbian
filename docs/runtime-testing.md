@@ -4,6 +4,18 @@ Use this checklist on a real Orange Pi 5 Pro after installing the `orp2` package
 
 CI proves that the package builds, installs, and links to the private RK3588 multimedia stack. These checks prove what happens on the actual board.
 
+## Confirmed ORP2 board findings
+
+Physical Orange Pi 5 Pro testing has established the following for the released ORP2 baseline:
+
+- **H.264 1920x804:** `h264-v4l2request` selected the RK3588 `rkvdec` media driver and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV12 with pitch 1920 and it rendered successfully.
+- **HEVC Main10 3840x2160:** `hevc-v4l2request` selected `rkvdec` and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV15 with pitch 4800 and this sample rendered successfully.
+- **HEVC Main10 1920x804:** `hevc-v4l2request` again selected `rkvdec` and hardware decoding succeeded, but presentation failed after decode. The NV15 DRM PRIME surface had pitch 2400 and Mesa reported `WSI pitch not properly aligned`, followed by NV15 DMA-BUF import / hardware-surface mapping failure.
+
+These results are important because they separate the remaining failure from decoder selection. ORP2 has proved that the RK3588 V4L2 Request decoder path is functional for both H.264 and HEVC Main10. The unresolved problem is dimension/stride-sensitive presentation of some NV15 hardware-decoded surfaces through the Stremio/libmpv OpenGL render path.
+
+Do not generalize one successful 4K NV15 sample to all HEVC Main10 content: the 3840-wide pitch-4800 sample imported successfully while the 1920-wide pitch-2400 sample did not.
+
 ## Install and verify package layout
 
 ```bash
@@ -79,6 +91,9 @@ For each hardware-decoding test, record:
 - resolution and frame rate;
 - whether `v4l2request` was selected;
 - relevant `rkvdec` / V4L2 Request kernel messages;
+- hardware frame format (`nv12`, `NV15`, etc.);
+- DRM PRIME pitch/stride where reported;
+- any DMA-BUF import or mapping errors;
 - whether playback remained stable while seeking;
 - CPU load as supporting evidence only, not as the primary proof.
 
