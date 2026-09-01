@@ -18,8 +18,8 @@ NV12 and every other format are untouched. The driver remains
 authoritative and the negotiated capture width and pitch are logged for
 board validation.
 ---
- libavutil/hwcontext_v4l2request.c | 26 ++++++++++++++++++++++++++
- 1 file changed, 26 insertions(+)
+ libavutil/hwcontext_v4l2request.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
 
 diff --git a/libavutil/hwcontext_v4l2request.c b/libavutil/hwcontext_v4l2request.c
 --- a/libavutil/hwcontext_v4l2request.c
@@ -32,7 +32,7 @@ diff --git a/libavutil/hwcontext_v4l2request.c b/libavutil/hwcontext_v4l2request
  
      if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
          format.fmt.pix_mp.width = hwfc->width;
-@@ -244,8 +245,33 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
+@@ -244,8 +245,34 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
          format.fmt.pix.sizeimage = buffersize;
      }
  
