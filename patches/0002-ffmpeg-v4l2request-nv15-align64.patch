@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: stremio-Opi5-Armbian maintainers <noreply@github.com>
+Date: Tue, 1 Sep 2026 17:35:00 +0100
+Subject: [PATCH] avutil/v4l2request: request 64-byte aligned NV15 capture pitch
+
+The RK3588 V4L2 Request decoder currently negotiates tightly packed NV15
+capture buffers.  On the physical Orange Pi 5 Pro test board a 1920-wide
+Main10 frame is exported with pitch 2400 and fails Mesa DMA-BUF import,
+while 3840-wide Main10 frames use pitch 4800 and import successfully.
+
+For NV15 CAPTURE only, ask the V4L2 driver for a 64-byte-aligned packed
+row stride.  This changes the 1920-wide request from 2400 to 2432 bytes
+and leaves 3840-wide NV15 at 4800.  NV12 and all other capture formats
+are untouched.  The driver remains authoritative: VIDIOC_S_FMT may
+adjust or reject the requested stride, and the returned format is later
+used to populate the DRM PRIME descriptor.
+
+This is an RK3588 board-test experiment, not a generic rendering
+workaround.
+---
+ libavutil/hwcontext_v4l2request.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/libavutil/hwcontext_v4l2request.c b/libavutil/hwcontext_v4l2request.c
+index 0000000000..0000000000 100644
+--- a/libavutil/hwcontext_v4l2request.c
++++ b/libavutil/hwcontext_v4l2request.c
+@@ -207,6 +207,7 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
+     AVV4L2RequestFramesContextInternal *fctxi = fctx->internal;
+     struct v4l2_format format = {
+         .type = type,
+     };
++    uint32_t requested_nv15_bytesperline = 0;
+ 
+     if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
+         format.fmt.pix_mp.width = hwfc->width;
+@@ -220,9 +221,35 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
+         format.fmt.pix.sizeimage = buffersize;
+     }
+ 
++#if defined(V4L2_PIX_FMT_NV15)
++    if (pixelformat == V4L2_PIX_FMT_NV15 &&
++        (type == V4L2_BUF_TYPE_VIDEO_CAPTURE ||
++         type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)) {
++        /* NV15 packs four 10-bit pixels into five bytes.  Request a real
++         * 64-byte-aligned CAPTURE layout rather than changing DRM metadata
++         * after allocation. */
++        const uint32_t packed_bytesperline = ((hwfc->width + 3) / 4) * 5;
++
++        requested_nv15_bytesperline = (packed_bytesperline + 63) & ~63U;
++        if (V4L2_TYPE_IS_MULTIPLANAR(type))
++            format.fmt.pix_mp.plane_fmt[0].bytesperline = requested_nv15_bytesperline;
++        else
++            format.fmt.pix.bytesperline = requested_nv15_bytesperline;
++    }
++#endif
++
+     if (ioctl(fctxi->video_fd, VIDIOC_S_FMT, &format) < 0)
+         return AVERROR(errno);
+ 
++    if (requested_nv15_bytesperline) {
++        const uint32_t negotiated_bytesperline = V4L2_TYPE_IS_MULTIPLANAR(type) ?
++            format.fmt.pix_mp.plane_fmt[0].bytesperline :
++            format.fmt.pix.bytesperline;
++
++        av_log(hwfc, AV_LOG_INFO,
++               "V4L2 Request NV15 capture pitch: requested %u, negotiated %u\n",
++               requested_nv15_bytesperline, negotiated_bytesperline);
++    }
++
+     return 0;
+ }
+ 
+-- 
+2.51.0
