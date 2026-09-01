@@ -1,3 +1,13 @@
+stremio (4.4.181-orp9) resolute; urgency=medium
+
+  * Experimental board-test candidate based directly on the ORP2-supported main branch.
+  * Keep the pinned FFmpeg/libmpv/libplacebo revisions and V4L2 Request decoder path.
+  * Request a 64-byte-aligned V4L2 NV15 CAPTURE pitch before buffer allocation.
+  * Leave NV12 and non-NV15 capture formats unchanged.
+  * Do not promote over ORP2 without successful physical Orange Pi 5 Pro testing.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Tue, 01 Sep 2026 17:40:00 +0100
+
 stremio (4.4.181-orp2) resolute; urgency=medium
 
   * Bundle a private pinned FFmpeg/libmpv stack under /opt/stremio/rk3588.
