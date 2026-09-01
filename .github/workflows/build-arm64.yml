@@ -63,11 +63,11 @@ jobs:
           if-no-files-found: warn
 
       - name: Validate package explicitly
-        run: ./scripts/validate-deb.sh stremio_4.4.181-orp2_arm64.deb
+        run: ./scripts/validate-deb.sh stremio_4.4.181-orp9_arm64.deb
 
       - name: Test apt installation and private RK3588 linkage
         run: |
-          sudo apt-get install -y ./stremio_4.4.181-orp2_arm64.deb
+          sudo apt-get install -y ./stremio_4.4.181-orp9_arm64.deb
           dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' stremio
           file /opt/stremio/stremio
           test -x /usr/bin/stremio
@@ -82,16 +82,16 @@ jobs:
       - name: Upload ARM64 Debian package
         uses: actions/upload-artifact@v4
         with:
-          name: stremio-4.4.181-orp2-arm64
-          path: stremio_4.4.181-orp2_arm64.deb
+          name: stremio-4.4.181-orp9-arm64
+          path: stremio_4.4.181-orp9_arm64.deb
           if-no-files-found: error
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v4.4.181-orp2
-          RELEASE_ASSET: stremio_4.4.181-orp2_arm64.deb
+          RELEASE_TAG: v4.4.181-orp9
+          RELEASE_ASSET: stremio_4.4.181-orp9_arm64.deb
         run: |
           set -euxo pipefail
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -99,6 +99,6 @@ jobs:
           else
             gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
-              --title "Stremio 4.4.181 ARM64 RK3588 V4L2-request (orp2)" \
-              --notes "ARM64 Stremio package for Ubuntu 26.04 / Armbian on RK3588. Bundles a pinned private FFmpeg/libmpv V4L2-request stack under /opt/stremio/rk3588 so H.264/HEVC can use the mainline RKVDEC request API without replacing system multimedia libraries. CI validates package installation and confirms Stremio resolves libmpv/libavcodec from the private stack. Physical RK3588 playback still requires on-device verification."
+              --title "Stremio 4.4.181 ARM64 RK3588 V4L2-request (orp9)" \
+              --notes "ARM64 Stremio package for Ubuntu 26.04 / Armbian on RK3588. ORP9 is a board-tested-candidate revision that keeps the ORP2 private pinned V4L2 Request stack and adds one narrow FFmpeg experiment: request a 64-byte-aligned NV15 CAPTURE pitch before V4L2 buffer allocation. Physical Orange Pi 5 Pro playback validation is required before this revision can replace ORP2."
           fi
