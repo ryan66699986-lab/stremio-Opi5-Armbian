@@ -1,3 +1,15 @@
+stremio (4.4.181-orp3) resolute; urgency=medium
+
+  * Start from the released ORP2 baseline only.
+  * Keep the same pinned RK3588 FFmpeg/libmpv/libplacebo revisions.
+  * Keep direct V4L2-request hardware decoding as the preferred hwdec path.
+  * Disable libavcodec direct rendering (`vd-lavc-dr=no`) inside the libmpv
+    render-API client to test whether DR-backed allocation causes the failing
+    HEVC Main10 NV15 pitch observed on the 1920x804 board sample.
+  * Do not carry forward any code from the historical ORP3+ experiments.
+
+ -- stremio-Opi5-Armbian maintainers <noreply@github.com>  Tue, 01 Sep 2026 16:45:00 +0100
+
 stremio (4.4.181-orp2) resolute; urgency=medium
 
   * Bundle a private pinned FFmpeg/libmpv stack under /opt/stremio/rk3588.
