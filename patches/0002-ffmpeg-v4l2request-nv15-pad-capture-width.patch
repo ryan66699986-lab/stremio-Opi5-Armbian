@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: stremio-Opi5-Armbian maintainers <noreply@github.com>
+Date: Tue, 1 Sep 2026 18:10:00 +0100
+Subject: [PATCH] avutil/v4l2request: pad NV15 capture width to 256 pixels
+
+Physical ORP9 testing proved that rkvdec ignores a userspace NV15
+bytesperline request: 1920-wide Main10 requested pitch 2432 but the
+driver recomputed 2400 and Mesa rejected the exported DMA-BUF.
+
+The kernel rkvdec capture-format path derives bytesperline from capture
+width via v4l2_fill_pixfmt_mp(). For NV15 CAPTURE only, request a width
+rounded up to 256 pixels before VIDIOC_S_FMT. This makes 1920 request
+2048, which should make the driver allocate NV15 pitch 2560, while
+3840 remains 3840 and pitch 4800. Visible AVFrame dimensions remain the
+codec dimensions; this only changes the V4L2 capture allocation layout.
+
+NV12 and every other format are untouched. The driver remains
+authoritative and the negotiated capture width and pitch are logged for
+board validation.
+---
+ libavutil/hwcontext_v4l2request.c | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/libavutil/hwcontext_v4l2request.c b/libavutil/hwcontext_v4l2request.c
+--- a/libavutil/hwcontext_v4l2request.c
++++ b/libavutil/hwcontext_v4l2request.c
+@@ -230,6 +230,7 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
+     struct v4l2_format format = {
+         .type = type,
+     };
++    uint32_t requested_nv15_capture_width = 0;
+ 
+     if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
+         format.fmt.pix_mp.width = hwfc->width;
+@@ -244,8 +245,33 @@ static int v4l2request_set_format(AVHWFramesContext *hwfc,
+         format.fmt.pix.sizeimage = buffersize;
+     }
+ 
++#if defined(V4L2_PIX_FMT_NV15)
++    if (pixelformat == V4L2_PIX_FMT_NV15 &&
++        (type == V4L2_BUF_TYPE_VIDEO_CAPTURE ||
++         type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)) {
++        /* rkvdec recomputes NV15 bytesperline from capture width and ignores
++         * a direct bytesperline request. Pad width to 256 pixels so packed
++         * 10-bit NV15 rows are naturally 64-byte aligned. */
++        requested_nv15_capture_width = (hwfc->width + 255U) & ~255U;
++        if (V4L2_TYPE_IS_MULTIPLANAR(type))
++            format.fmt.pix_mp.width = requested_nv15_capture_width;
++        else
++            format.fmt.pix.width = requested_nv15_capture_width;
++    }
++#endif
++
+     if (ioctl(fctxi->video_fd, VIDIOC_S_FMT, &format) < 0)
+         return AVERROR(errno);
+ 
++    if (requested_nv15_capture_width) {
++        const uint32_t negotiated_width = V4L2_TYPE_IS_MULTIPLANAR(type) ?
++            format.fmt.pix_mp.width : format.fmt.pix.width;
++        const uint32_t negotiated_pitch = V4L2_TYPE_IS_MULTIPLANAR(type) ?
++            format.fmt.pix_mp.plane_fmt[0].bytesperline : format.fmt.pix.bytesperline;
++
++        av_log(hwfc, AV_LOG_INFO,
++               "V4L2 Request NV15 capture layout: requested width %u, negotiated width %u, pitch %u\n",
++               requested_nv15_capture_width, negotiated_width, negotiated_pitch);
++    }
++
+     return 0;
+ }
+ 
+-- 
+2.51.0
