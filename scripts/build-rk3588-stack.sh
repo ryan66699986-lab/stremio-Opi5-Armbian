@@ -43,7 +43,7 @@ FFMPEG_COMMIT=$(clone_head "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_BRANCH" "$FFMPEG_
     --enable-libdrm \
     --enable-libudev \
     --enable-v4l2-request
-  grep -E 'CONFIG_V4L2_REQUEST[[:space:]]+1' config.h
+  grep -E 'CONFIG_V4L2_REQUEST[[:space:]]+1' config.h >/dev/null
   make -j"$(nproc)"
   make DESTDIR="$STAGE_DIR" install
 )
@@ -99,8 +99,10 @@ while IFS= read -r -d '' elf; do
 done < <(find "${PREFIX_DIR}/lib" -maxdepth 1 -type f -name '*.so*' -print0)
 
 LIBMPV_REAL=$(readlink -f "${PREFIX_DIR}/lib/libmpv.so")
-readelf -h "$LIBMPV_REAL" | grep -q 'Machine:.*AArch64'
-strings "$LIBMPV_REAL" | grep -q 'v4l2request'
+readelf -h "$LIBMPV_REAL" | grep 'Machine:.*AArch64' >/dev/null
+# Do not use grep -q here: with pipefail it may terminate strings early and
+# turn a successful match into status 141 from SIGPIPE.
+strings "$LIBMPV_REAL" | grep 'v4l2request' >/dev/null
 
 cat >"${WORK_ROOT}/stack.env" <<EOF
 RK_STACK_STAGE=${STAGE_DIR}
