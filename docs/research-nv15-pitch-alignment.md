@@ -2,16 +2,16 @@
 
 > **Scope:** research/documentation only. This note does not prescribe or implement a code change.
 >
-> **Date:** 2026-09-01
+> **Date:** 2026-09-01, corrected 2026-09-06 after ORP10 board validation.
 
 ## Why this note exists
 
-The current real-board evidence in this repository shows a useful split:
+The real-board evidence shows two different NV15 presentation outcomes that must not be conflated:
 
-- HEVC Main10 at **3840x2160** hardware-decodes to **NV15** with pitch **4800** and renders successfully;
 - HEVC Main10 at **1920x804** hardware-decodes to **NV15** with pitch **2400**, but Mesa rejects the imported surface with `WSI pitch not properly aligned`.
+- HEVC Main10 at **3840x2160** hardware-decodes to **NV15** with pitch **4800** and the DMA-BUF import succeeds, but later ORP10 physical testing showed that successful import can still produce a visibly green image.
 
-That pattern is consistent with a pitch-alignment problem in the Panfrost DMA-BUF/explicit-layout import path rather than a decoder failure.
+The original version of this note incorrectly described the 3840-wide case as rendering successfully. The evidence actually supported successful decode and DMA-BUF import, not confirmed correct pixel presentation.
 
 ## NV15 packing explains the observed pitches
 
@@ -34,7 +34,7 @@ Linux format definition:
 
 - https://github.com/torvalds/linux/blob/master/include/uapi/drm/drm_fourcc.h
 
-## Why 2400 vs 4800 is significant
+## Why 2400 vs 4800 is still significant
 
 Current Mesa Panfrost layout code rejects an explicitly supplied WSI/DMA-BUF row pitch when the pitch does not satisfy the driver's required alignment. The relevant paths emit the exact error already observed on the Orange Pi:
 
@@ -53,11 +53,11 @@ A particularly useful numerical correlation is:
 4800 % 64 = 0
 ```
 
-That makes a **64-byte row-alignment requirement** a strong working hypothesis for the observed success/failure split.
+That makes a **64-byte row-alignment requirement** a strong working hypothesis for the difference between the 1920-wide import failure and 3840-wide import success.
 
-This is not yet proof of the exact `align_mask` used for the failing NV15 import. The exact value should be treated as unconfirmed until it is observed from the relevant Mesa path or a controlled width matrix reproduces the boundary. What is proven is that Mesa rejects the 2400-byte explicit pitch as misaligned, while the 4800-byte surface succeeds.
+This is not proof that pitch alignment is the entire HEVC/Main10 presentation problem. ORP10 proved that a surface can pass the import stage and still display incorrectly as green. The pitch hypothesis therefore explains an **import boundary**, not necessarily end-to-end visual correctness.
 
-## A useful prediction for controlled testing
+## A useful prediction for controlled import testing
 
 For tightly packed NV15:
 
@@ -79,18 +79,18 @@ width % 256 == 0
 
 That predicts a simple width-dependent boundary for tightly packed NV15 surfaces:
 
-| Width | Tight NV15 pitch | Pitch % 64 | Prediction under 64-byte hypothesis |
+| Width | Tight NV15 pitch | Pitch % 64 | Prediction for DMA-BUF import under 64-byte hypothesis |
 | ---: | ---: | ---: | --- |
-| 1280 | 1600 | 0 | aligned |
-| 1920 | 2400 | 32 | misaligned |
-| 2048 | 2560 | 0 | aligned |
-| 2560 | 3200 | 0 | aligned |
-| 3840 | 4800 | 0 | aligned |
-| 4096 | 5120 | 0 | aligned |
+| 1280 | 1600 | 0 | aligned/importable candidate |
+| 1920 | 2400 | 32 | misaligned/import failure candidate |
+| 2048 | 2560 | 0 | aligned/importable candidate |
+| 2560 | 3200 | 0 | aligned/importable candidate |
+| 3840 | 4800 | 0 | aligned/importable candidate |
+| 4096 | 5120 | 0 | aligned/importable candidate |
 
-This matches the two existing real-board observations: 1920 fails at import, while 3840 succeeds.
+This matches the existing real-board import observations: 1920 fails at import, while 3840 imports. It does **not** predict whether an imported frame will display with correct colors/content.
 
-A future **research test**, without changing the application stack, could use otherwise comparable Main10 samples at widths on both sides of this predicted boundary. If widths divisible by 256 consistently import and nearby non-divisible widths consistently fail, that would substantially strengthen the alignment diagnosis.
+A future research test could use otherwise comparable Main10 samples at widths on both sides of this predicted boundary to validate the import rule. Visual correctness must be recorded separately for every sample.
 
 ## Mesa does support NV15 as a format
 
@@ -104,9 +104,10 @@ The important distinction is therefore:
 
 ```text
 NV15 format support != every externally supplied NV15 stride being importable
+NV15 import success != correct on-screen pixel presentation
 ```
 
-The current Mesa source still contains explicit-layout pitch validation, so the existence of newer Mesa releases alone is not evidence that this particular stride issue has been removed.
+The current Mesa source still contains explicit-layout pitch validation, so the existence of newer Mesa releases alone is not evidence that either the import issue or the green-output issue has been removed.
 
 ## Kernel/display support is a separate layer
 
@@ -116,51 +117,58 @@ Linux Rockchip VOP2 source:
 
 - https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/rockchip/rockchip_drm_vop2.c
 
-That is consistent with the broader board evidence: RK3588 hardware decode itself succeeds, and at least one NV15 surface is usable end-to-end. The failure occurs later, when a particular decoded DMA-BUF surface is imported into the Mesa/Panfrost rendering path.
+That is consistent with the broader board evidence: RK3588 hardware decode itself succeeds. But capability at one layer does not prove correctness at the next.
 
-This also means three distinct capabilities should not be conflated:
+Four distinct capabilities must now be tracked independently:
 
-1. **RKVDEC can decode HEVC Main10 into NV15.** Already proven on board.
-2. **Rockchip DRM/VOP2 knows NV15.** Present in mainline kernel code.
-3. **Panfrost can import a particular externally allocated NV15 surface with its supplied pitch/modifier.** This is the dimension/stride-sensitive part currently failing.
+1. **RKVDEC can decode HEVC Main10 into NV15.** Proven on board.
+2. **The exported NV15 layout satisfies the consumer's import constraints.** Dimension/stride-sensitive; 1920/pitch2400 fails, 3840/pitch4800 imports.
+3. **Mesa/libmpv accepts/imports the DMA-BUF.** Proven for tested 3840-wide pitch4800 surfaces.
+4. **The imported pixels are interpreted and displayed correctly.** Not proven for HEVC/NV15; ORP10 showed a green screen despite successful import.
 
 ## Research implication for possible solution classes
 
-Without selecting or implementing any one solution, the evidence narrows future investigation to the boundary between the producer's decoded surface layout and the consumer's import requirements.
+The evidence now points to at least two separate subproblems in the NV15 presentation path:
 
-The broad solution classes worth evaluating upstream are therefore:
+- producer/consumer layout compatibility for some pitches;
+- correct interpretation/presentation after import for surfaces that do pass the layout checks.
 
-- producer-side allocation/padding that yields a Panfrost-acceptable NV15 stride;
-- a GPU- or hardware-assisted repack/conversion into an importable 10-bit format/layout;
-- a presentation route that can use the decoded NV15 surface without the failing Panfrost texture-import path;
-- an upstream Mesa change, but only if the hardware can safely consume the currently rejected explicit pitch and Mesa's restriction is shown to be unnecessarily strict.
+Without selecting or implementing any one solution, useful solution classes include:
 
-The existing evidence does **not** justify assuming that simply forcing Mesa to accept the stride is safe. Alignment checks generally encode hardware/layout constraints, so any relaxation would need upstream-level justification.
+- producer-side allocation/padding that yields a Panfrost-acceptable NV15 stride for widths such as 1920;
+- investigation of NV15 plane geometry, offsets, texture interpretation, color/chroma handling, and any format assumptions in the libmpv/Mesa import path that could explain green output after successful import;
+- a GPU- or hardware-assisted repack/conversion into a known-correct importable format/layout;
+- a presentation route that can use the decoded NV15 surface without the failing or visually incorrect Panfrost texture-import path;
+- an upstream Mesa change, but only if the hardware can safely consume the layout and the current interpretation is shown to be wrong or unnecessarily restricted.
 
-## Related contemporary RK3588 work
-
-Current community work around RK3588 V4L2 Request also confirms that NV15/Main10 presentation is a distinct problem from stateless decode itself. One recent RK3588 build guide describes dedicated mpv work for NV15 GPU presentation on Mali, again separating decode from rendering/import concerns:
-
-- https://gist.github.com/ryanfitz
-
-This is supporting context only; the strongest evidence for this repository remains the direct Orange Pi 5 Pro runtime results already recorded in `runtime-testing.md` and `hardware-decode-history.md`.
+The existing evidence does **not** justify simply forcing Mesa to accept arbitrary strides, nor does an accepted stride prove the NV15 byte/plane interpretation is correct.
 
 ## Current research conclusion
 
-The best-supported interpretation of the ORP2 Main10 failure is:
+The best-supported model is now:
 
 ```text
 HEVC Main10 decode succeeds
         ↓
-RKVDEC produces tightly packed NV15
+RKVDEC exports tightly packed NV15
         ↓
-1920-wide surface has 2400-byte pitch
+1920-wide / pitch 2400
         ↓
-Panfrost explicit DMA-BUF import rejects that pitch as misaligned
+Panfrost explicit DMA-BUF import rejects pitch
         ↓
-presentation fails
+no usable presentation
 ```
 
-while the successful 3840-wide case naturally produces a 4800-byte pitch that is 64-byte aligned.
+and separately:
 
-The **width-multiple-of-256 prediction** is the most useful new research result from this comparison. It is testable without changing application code and can help determine whether the unresolved ORP2 problem is fundamentally a deterministic stride-alignment boundary rather than content-specific HEVC behavior.
+```text
+HEVC Main10 decode succeeds
+        ↓
+3840-wide / pitch 4800
+        ↓
+DMA-BUF import succeeds
+        ↓
+actual displayed image can still be green
+```
+
+So the **width-multiple-of-256 prediction remains useful for the import-alignment boundary only**. It must no longer be treated as an end-to-end rendering-success predictor.
