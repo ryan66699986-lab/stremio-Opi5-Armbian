@@ -1,0 +1,4 @@
+#!/bin/sh
+export LC_NUMERIC=C
+export SERVER_PATH=/opt/stremio/server.js
+exec /opt/stremio/stremio "$@"
