@@ -8,13 +8,22 @@ CI proves that the package builds, installs, and links to the private RK3588 mul
 
 Physical Orange Pi 5 Pro testing has established the following for the released ORP2 baseline:
 
-- **H.264 1920x804:** `h264-v4l2request` selected the RK3588 `rkvdec` media driver and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV12 with pitch 1920 and it rendered successfully.
-- **HEVC Main10 3840x2160:** `hevc-v4l2request` selected `rkvdec` and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV15 with pitch 4800 and this sample rendered successfully.
+- **H.264 1920x804:** `h264-v4l2request` selected the RK3588 `rkvdec` media driver and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV12 with pitch 1920 and it rendered successfully. This is the genuinely known-good visual playback path.
+- **HEVC Main10 3840x2160:** `hevc-v4l2request` selected `rkvdec` and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV15 with pitch 4800 and the DMA-BUF imported successfully. **Do not treat that import as proof of correct visual presentation.** Later ORP10 physical testing reproduced the same successful decode/import characteristics while the actual screen was green.
 - **HEVC Main10 1920x804:** `hevc-v4l2request` again selected `rkvdec` and hardware decoding succeeded, but presentation failed after decode. The NV15 DRM PRIME surface had pitch 2400 and Mesa reported `WSI pitch not properly aligned`, followed by NV15 DMA-BUF import / hardware-surface mapping failure.
 
-These results are important because they separate the remaining failure from decoder selection. ORP2 has proved that the RK3588 V4L2 Request decoder path is functional for both H.264 and HEVC Main10. The unresolved problem is dimension/stride-sensitive presentation of some NV15 hardware-decoded surfaces through the Stremio/libmpv OpenGL render path.
+These results are important because they separate several different layers that must not be conflated. ORP2 has proved that the RK3588 V4L2 Request decoder path is functional for both H.264 and HEVC Main10. The unresolved HEVC/Main10 problem is presentation of NV15 hardware-decoded surfaces through the Stremio/libmpv OpenGL render path.
 
-Do not generalize one successful 4K NV15 sample to all HEVC Main10 content: the 3840-wide pitch-4800 sample imported successfully while the 1920-wide pitch-2400 sample did not.
+For every HEVC/NV15 result, record these outcomes separately:
+
+1. decoder success (`Using hardware decoding (v4l2request)`),
+2. DRM PRIME format and pitch,
+3. DMA-BUF import success/failure,
+4. actual on-screen visual correctness.
+
+A successful `Imported DRM NV15...` log line proves only the import step. It does not prove the displayed pixels are correct.
+
+Do not generalize the 3840-wide pitch-4800 import result to visual playback success. The 1920-wide pitch-2400 sample fails earlier at import, while the 3840-wide pitch-4800 path can import yet still produce incorrect green output.
 
 ## Clean ORP3 experiment: tested and rejected
 
@@ -24,13 +33,13 @@ Physical board testing rejected that hypothesis:
 
 - ORP3 was confirmed active because startup reported `Set property: vd-lavc-dr="no"`.
 - **HEVC Main10 1920x804** still hardware-decoded through `hevc-v4l2request` / `rkvdec`, still produced DRM PRIME NV15 with pitch **2400**, and still failed with `WSI pitch not properly aligned`, `Failed to import NV15 byte plane 0`, `mapping DRM dmabuf failed`, and `Mapping hardware decoded surface failed`.
-- **HEVC Main10 3840x2160** remained successful with NV15 pitch **4800**.
-- A separate **HEVC Main10 3840x1608** stream also hardware-decoded successfully and repeatedly imported NV15 with pitch **4800**.
+- **HEVC Main10 3840x2160** remained decodable/importable with NV15 pitch **4800**, but this must not be labeled a confirmed visual success without explicit on-screen verification.
+- A separate **HEVC Main10 3840x1608** stream also hardware-decoded and repeatedly imported NV15 with pitch **4800**; again, import success alone is not visual proof.
 - **H.264 1920x804** remained successful through `h264-v4l2request` / `rkvdec`, using NV12 with pitch **1920**.
 
 Conclusion: disabling libavcodec direct rendering did not alter the failing NV15 stride and did not fix presentation. Clean ORP3 is therefore rejected as a deployment candidate. ORP2 remains the supported baseline.
 
-The extra successful 3840x1608 sample strengthens the working width/pitch diagnosis: both tested 3840-wide Main10 streams produce pitch 4800 and import successfully despite different heights, while the tested 1920-wide Main10 stream produces pitch 2400 and fails. This supports focusing future research on the NV15 DMA-BUF stride/alignment boundary rather than decoder selection or generic libmpv direct-rendering settings.
+The 3840-wide samples still strengthen the stride diagnosis only at the **DMA-BUF import layer**: tested 3840-wide Main10 surfaces produce pitch 4800 and import successfully, while the tested 1920-wide Main10 surface produces pitch 2400 and is rejected as misaligned. They do **not** establish that 3840-wide NV15 is visually correct end-to-end. Future work must account for both the 1920 import failure and the separate green-output presentation issue.
 
 ## Install and verify package layout
 
@@ -75,7 +84,7 @@ Confirm:
 
 Test representative media and confirm:
 
-- video playback;
+- video playback and **actual visual correctness** (not just absence of import errors);
 - audio output;
 - seeking forward and backward;
 - subtitle selection and rendering;
@@ -110,10 +119,11 @@ For each hardware-decoding test, record:
 - hardware frame format (`nv12`, `NV15`, etc.);
 - DRM PRIME pitch/stride where reported;
 - any DMA-BUF import or mapping errors;
+- whether the **actual displayed image is visually correct** (including green/black/corrupt output);
 - whether playback remained stable while seeking;
 - CPU load as supporting evidence only, not as the primary proof.
 
-Do not mark hardware acceleration as working merely because `hwdec=auto` is accepted or because playback is smooth.
+Do not mark hardware acceleration or visual playback as working merely because `hwdec=auto` is accepted, playback is smooth, or a DMA-BUF import log succeeds.
 
 ## Desktop/session diagnostics
 
@@ -144,5 +154,6 @@ Mark the release as board-validated only when all of these are true on the targe
 - UI launches and renders normally;
 - normal playback controls work;
 - tested hardware-decodable streams select the RK3588 V4L2 Request path with supporting runtime evidence;
+- tested video is actually visually correct on-screen, not merely successfully decoded/imported;
 - no system multimedia libraries had to be replaced or manually copied;
 - uninstall completes normally.
