@@ -21,10 +21,10 @@ test -x "$ROOT/usr/bin/stremio" || { echo "error: Stremio launcher missing" >&2;
 test -f "$ROOT/opt/stremio/server.js" || { echo "error: Stremio server.js missing" >&2; exit 1; }
 test -e "$RK_LIB/libmpv.so" || { echo "error: private RK3588 libmpv missing" >&2; exit 1; }
 
-readelf -h "$STREMIO" | grep -q 'Machine:.*AArch64' || {
+readelf -h "$STREMIO" | grep 'Machine:.*AArch64' >/dev/null || {
   echo "error: Stremio executable is not AArch64" >&2; exit 1;
 }
-readelf -d "$STREMIO" | grep -q 'Shared library: \[libmpv\.so' || {
+readelf -d "$STREMIO" | grep 'Shared library: \[libmpv\.so' >/dev/null || {
   echo "error: Stremio is not linked to libmpv" >&2; exit 1;
 }
 [[ $(patchelf --print-rpath "$STREMIO") == '$ORIGIN/rk3588/lib' ]] || {
@@ -32,16 +32,18 @@ readelf -d "$STREMIO" | grep -q 'Shared library: \[libmpv\.so' || {
 }
 
 LIBMPV_REAL=$(readlink -f "$RK_LIB/libmpv.so")
-readelf -h "$LIBMPV_REAL" | grep -q 'Machine:.*AArch64' || {
+readelf -h "$LIBMPV_REAL" | grep 'Machine:.*AArch64' >/dev/null || {
   echo "error: private libmpv is not AArch64" >&2; exit 1;
 }
-strings "$LIBMPV_REAL" | grep -q 'v4l2request' || {
+# Consume the complete strings output. grep -q can make strings exit on SIGPIPE
+# under pipefail even when the requested marker was found.
+strings "$LIBMPV_REAL" | grep 'v4l2request' >/dev/null || {
   echo "error: private libmpv does not contain V4L2-request support" >&2; exit 1;
 }
 
 LIBAVCODEC=$(find "$RK_LIB" -maxdepth 1 -type f -name 'libavcodec.so.*' -print -quit)
 [[ -n "$LIBAVCODEC" ]] || { echo "error: private libavcodec missing" >&2; exit 1; }
-readelf -h "$LIBAVCODEC" | grep -q 'Machine:.*AArch64' || {
+readelf -h "$LIBAVCODEC" | grep 'Machine:.*AArch64' >/dev/null || {
   echo "error: private libavcodec is not AArch64" >&2; exit 1;
 }
 
