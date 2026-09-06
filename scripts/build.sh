@@ -35,6 +35,9 @@ done < <(find "$BUILD_PC" -type f -name '*.pc' -print0)
 
 export PKG_CONFIG_PATH="${BUILD_PC}${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
 export LD_LIBRARY_PATH="${RK_STACK_LIBDIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+# libmpv2-sys emits -lmpv without propagating a native search path. Point the
+# system linker at the staged private libmpv while Cargo links the shell.
+export LIBRARY_PATH="${RK_STACK_LIBDIR}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
 
 (
   cd "$SOURCE_DIR"
