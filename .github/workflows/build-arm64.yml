@@ -51,7 +51,7 @@ jobs:
           ldd /opt/stremio/stremio | tee /tmp/stremio-ldd.txt
           grep -E 'libmpv\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
           grep -E 'libavcodec\.so.*=> /opt/stremio/rk3588/lib/' /tmp/stremio-ldd.txt
-          strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 v4l2request
+          strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep 'v4l2request' >/dev/null
           sudo apt-get remove -y stremio
 
       - name: Upload ARM64 Debian package
