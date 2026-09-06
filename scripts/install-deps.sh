@@ -7,6 +7,17 @@ if [[ $(dpkg --print-architecture) != arm64 ]]; then
 fi
 
 sudo apt-get update
+
+# GitHub's Ubuntu 26.04 ARM64 image can start with the archive component that
+# carries WebKitGTK development headers disabled. The current Stremio Linux
+# shell requires libwebkitgtk-6.0-dev, so enable Universe only when apt has no
+# install candidate for it.
+if ! apt-cache policy libwebkitgtk-6.0-dev | grep -Eq 'Candidate: [^()]'; then
+  sudo apt-get install -y software-properties-common
+  sudo add-apt-repository -y universe
+  sudo apt-get update
+fi
+
 sudo apt-get install -y \
   binutils \
   build-essential \
