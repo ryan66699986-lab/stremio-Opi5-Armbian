@@ -23,16 +23,37 @@ For every HEVC/NV15 result, record separately:
 
 A successful `Imported DRM NV15...` log line proves only the import step. It does not prove the displayed pixels are correct.
 
+## Current-line comparison test
+
+The first current-line candidate is not just another ORP2 package rebuild. It changes from the legacy Qt shell to the official Rust/GTK `stremio-linux-shell`, whose video host uses GTK `GLArea` and libmpv's OpenGL render context.
+
+As of the initial migration on 2026-09-06, Ryan Fitzgerald's FFmpeg and mpv-rockchip branch heads were still the same commits used by ORP2. Therefore the first current test is especially useful as an application/presentation comparison rather than as proof of a new decoder implementation.
+
+Use the same representative streams that established the ORP2 baseline where possible and compare:
+
+| Test | ORP2 reference | Current result to record |
+| --- | --- | --- |
+| H.264 1920x804 | V4L2 Request + rkvdec, NV12 pitch 1920, visually correct | decoder, format/pitch, visual correctness |
+| HEVC Main10 1920x804 | V4L2 Request decode succeeds, NV15 pitch 2400, import fails | decoder, pitch, import result, visual result |
+| HEVC Main10 3840x2160 | V4L2 Request decode succeeds, NV15 pitch 4800, import succeeds; visual correctness not established by import | decoder, pitch, import result, actual screen result |
+
+Do not declare current better merely because the UI launches or because the same import log appears. The meaningful question is whether actual playback behavior changes.
+
 ## Install and verify package layout
 
 For the frozen ORP2 fallback:
 
 ```bash
 sudo apt install ./stremio_4.4.181-orp2_arm64.deb
+```
 
+For a current candidate, install the generated `stremio_*current_arm64.deb` package.
+
+Then inspect the installed package:
+
+```bash
 dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' stremio
-readlink -f /usr/bin/stremio
-patchelf --print-rpath /opt/stremio/stremio
+file /opt/stremio/stremio
 ldd /opt/stremio/stremio | tee stremio-ldd.log
 strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 v4l2request
 ```
@@ -40,12 +61,13 @@ strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 v4l2reques
 Confirm:
 
 - package architecture is `arm64`;
-- `/usr/bin/stremio` resolves to `/opt/stremio/stremio`;
-- Stremio's RPATH is `$ORIGIN/rk3588/lib`;
+- `/opt/stremio/stremio` is AArch64;
 - `libmpv.so`, `libavcodec.so`, `libavformat.so`, and related private libraries resolve from `/opt/stremio/rk3588/lib`;
 - the private libmpv contains `v4l2request` support.
 
-If any of those fail, stop before playback testing. Do not copy replacement libraries into `/usr/lib`.
+ORP2 and current do not necessarily have identical launcher/RPATH details because the Stremio shell implementation changed. Judge linkage by the actual installed library resolution, not by assuming the old Qt executable layout must remain byte-for-byte identical.
+
+If private multimedia libraries do not resolve correctly, stop before playback testing. Do not copy replacement libraries into `/usr/lib`.
 
 ## Launch and UI
 
@@ -56,6 +78,8 @@ stremio 2>&1 | tee stremio-runtime.log
 ```
 
 Confirm the application starts, the UI renders, the Stremio service connects, libmpv initializes, and video can actually be displayed.
+
+For current, also watch for GTK4/libadwaita/WebKitGTK or GL-context failures that did not exist in the old Qt shell.
 
 ## Playback behavior
 
@@ -103,6 +127,8 @@ Promote a current build only when all of these are true on the target Orange Pi 
 - normal playback controls work;
 - tested hardware-decodable streams use the expected RK3588 hardware path;
 - tested video is actually visually correct on-screen;
+- the known-good H.264 path has not regressed;
+- HEVC/NV15 results are explicitly compared against the ORP2 evidence rather than inferred from logs;
 - no system multimedia libraries had to be replaced manually;
 - uninstall completes normally.
 
