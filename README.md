@@ -1,176 +1,77 @@
-# Stremio ARM64 for Orange Pi 5 Pro / RK3588
+# Stremio on Orange Pi 5 Pro / RK3588
 
-This repository produces an **unofficial native ARM64 build of Stremio for Orange Pi 5 Pro / compatible RK3588 boards running Armbian on Ubuntu 26.04**. It is not an official Stremio distribution.
+Unofficial ARM64 packaging and RK3588 multimedia integration for Orange Pi 5 Pro on Armbian / Ubuntu 26.04.
 
-The current package is **Stremio 4.4.181-orp2**. It bundles an isolated, pinned RK3588 V4L2-request FFmpeg/libmpv stack under `/opt/stremio/rk3588` so Stremio can use the mainline RK3588 request-decoder userspace path without replacing the system multimedia libraries.
+## Working baseline
 
-## Current release
+The last physically proven package is **Stremio 4.4.181-orp2**.
 
-| Item | Value |
-| --- | --- |
-| Hardware target | Orange Pi 5 Pro / RK3588 |
-| Architecture | ARM64 / AArch64 |
-| OS | Armbian |
-| Base distribution | Ubuntu 26.04 “Resolute Raccoon” |
-| Stremio shell | 4.4.181 |
-| Package revision | `orp2` |
-| Debian package | `stremio_4.4.181-orp2_arm64.deb` |
-| Private multimedia prefix | `/opt/stremio/rk3588` |
-| Release tag | `v4.4.181-orp2` |
+It is preserved permanently at:
 
-Release page:
+- branch: `baseline/orp2-working`
+- release: `v4.4.181-orp2`
 
-https://github.com/ryan66699986-lab/stremio-Opi5-Armbian/releases/tag/v4.4.181-orp2
+ORP2 uses the older Qt Stremio shell plus a private RK3588 FFmpeg/libmpv V4L2 Request stack under `/opt/stremio/rk3588`. It does not replace distribution multimedia libraries.
 
-## What `orp2` does
+ORP2 is the rollback point. Future development must not destroy or rewrite that baseline.
 
-`orp2` keeps the official Stremio 4.4.181 shell as the application base and adds the RK3588-specific multimedia path in a contained way:
+## Current development policy
 
-- builds the exact pinned official Stremio shell source;
-- builds a pinned FFmpeg with V4L2-request enabled;
-- builds a pinned mpv/libmpv with `v4l2request` enabled;
-- bundles the resulting private multimedia libraries under `/opt/stremio/rk3588/lib`;
-- links Stremio against that private libmpv instead of Ubuntu's system libmpv;
-- gives `/opt/stremio/stremio` the RPATH `$ORIGIN/rk3588/lib`;
-- gives the private multimedia libraries an `$ORIGIN` RPATH so they resolve their peers inside the private stack;
-- maps Stremio's generic `hwdec=yes` / `hwdec=auto` request to try `v4l2request` first and then fall back to mpv's normal safe methods;
-- fixes Qt WebEngine/OpenGL-context initialization ordering for the ARM64 desktop shell;
-- packages everything as a normal Debian package without overwriting distribution multimedia libraries.
+Development after ORP2 no longer uses ORP3/ORP4/etc. numbering.
 
-The package does not install private FFmpeg/libmpv files into `/usr/lib` and does not replace the OS multimedia stack.
+The forward line is simply **current** and follows the newest relevant upstream branch heads at build time:
 
-## Pinned sources
+- Stremio: `Stremio/stremio-linux-shell` → `main`
+- RK3588 FFmpeg: `ryanfitz/FFmpeg` → `rk3588-hevc-rps-controls`
+- RK3588 mpv/libmpv: `ryanfitz/mpv-rockchip` → `rk3588-nv15-gpu-next`
+- libplacebo: current upstream revision required by the mpv build
 
-All external source revisions are recorded in [`upstream.env`](upstream.env). The current `orp2` pins are:
+The current line should contain as little project-specific multimedia code as possible. Prefer upstream fixes. Do not add speculative renderer/copyback/stride hacks merely to produce another candidate.
 
-| Component | Commit |
-| --- | --- |
-| Stremio shell 4.4.181 | `41659b91c27fbb5812b167a04f2fdc50c82d4e9f` |
-| RK3588 FFmpeg | `151f3befc4593d7f8c57946b3338005bdf8ae262` |
-| RK3588 mpv/libmpv | `5cf2859a320626a3588622b448292815caf419fc` |
-| libplacebo | `cee9b076f2c63104ccfd497fa79c39a867293ec4` |
+A moving upstream build is not a supported release just because it compiles. Physical Orange Pi testing remains authoritative. If current upstream regresses, use the preserved ORP2 baseline while waiting for upstream fixes.
 
-The build scripts perform clean pinned checkouts rather than tracking moving branches.
+See [`docs/maintenance-policy.md`](docs/maintenance-policy.md).
 
-## Native ARM64 build
+## What ORP2 proved
 
-Use a native ARM64 Ubuntu 26.04 environment. The scripts reject non-ARM64 hosts.
+- H.264 through `h264-v4l2request` / `rkvdec` works and renders correctly as NV12.
+- HEVC Main10 hardware decode through `hevc-v4l2request` / `rkvdec` works.
+- HEVC Main10/NV15 presentation is not fully solved on this stack.
+- A 1920-wide NV15 surface with pitch 2400 can fail Mesa DMA-BUF import alignment checks.
+- A 3840-wide NV15 surface with pitch 4800 can import successfully and still display green, so import success is not visual correctness.
 
-```bash
-git clone https://github.com/ryan66699986-lab/stremio-Opi5-Armbian.git
-cd stremio-Opi5-Armbian
+See [`docs/runtime-testing.md`](docs/runtime-testing.md) and [`docs/hardware-decode-history.md`](docs/hardware-decode-history.md).
 
-./scripts/install-deps.sh
-./scripts/build-rk3588-stack.sh
-./scripts/build.sh
-./scripts/build-deb.sh
-```
+## Archived experiments
 
-The output is:
+ORP3 through ORP10 are rejected research history, not release candidates. Their results are retained because they document what was tried and what failed.
+
+See [`docs/experimental-branches.md`](docs/experimental-branches.md) and [`docs/archive/README.md`](docs/archive/README.md).
+
+## Build layout
+
+The proven ORP2 architecture keeps the RK3588 multimedia stack private:
 
 ```text
-stremio_4.4.181-orp2_arm64.deb
+/opt/stremio/stremio
+/opt/stremio/rk3588/lib/...
 ```
 
-The build order is intentional. `build.sh` refuses to continue unless the private RK3588 multimedia stack has already been built, and `build-deb.sh` refuses to package unless both the Stremio executable and private stack exist.
+That isolation principle remains useful for future builds: experimental/current multimedia libraries should not overwrite Ubuntu/Armbian FFmpeg, mpv or Mesa packages.
 
-## Install
+## Runtime rule
 
-```bash
-sudo apt install ./stremio_4.4.181-orp2_arm64.deb
-stremio
-```
+CI proves compilation, packaging and linkage. It does not prove playback.
 
-Uninstall normally with:
+For hardware-decoding tests, record separately:
 
-```bash
-sudo apt remove stremio
-```
+1. decoder selection,
+2. DRM PRIME format/pitch,
+3. DMA-BUF import success/failure,
+4. actual on-screen image correctness.
 
-## Verify the installed package
+A successful `Imported DRM NV15...` message is not by itself a playback pass.
 
-The release CI performs these checks automatically, and they can also be repeated on the target system:
+## License
 
-```bash
-dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' stremio
-readlink -f /usr/bin/stremio
-patchelf --print-rpath /opt/stremio/stremio
-ldd /opt/stremio/stremio
-strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 v4l2request
-```
-
-Expected key results:
-
-- package architecture is `arm64`;
-- `/usr/bin/stremio` resolves to `/opt/stremio/stremio`;
-- Stremio's RPATH is `$ORIGIN/rk3588/lib`;
-- `libmpv.so` and `libavcodec.so` resolve from `/opt/stremio/rk3588/lib`;
-- the bundled libmpv contains V4L2-request support.
-
-For package-level validation without installing it:
-
-```bash
-./scripts/validate-deb.sh stremio_4.4.181-orp2_arm64.deb
-```
-
-## GitHub Actions and release gate
-
-`.github/workflows/build-arm64.yml` uses GitHub's native `ubuntu-26.04-arm` runner. The release workflow:
-
-1. confirms the runner is native ARM64;
-2. installs Ubuntu 26.04 build dependencies;
-3. inspects the known reference ARM64 package;
-4. builds the pinned RK3588 FFmpeg/libmpv stack;
-5. builds the pinned official Stremio shell against that private stack;
-6. creates `stremio_4.4.181-orp2_arm64.deb`;
-7. runs explicit Debian-package validation;
-8. installs the package with apt;
-9. verifies Stremio's private RPATH and `libmpv` / `libavcodec` resolution;
-10. verifies the bundled libmpv contains `v4l2request`;
-11. uploads the Debian package as a workflow artifact;
-12. on a successful push to `main`, publishes or updates release `v4.4.181-orp2`.
-
-A green CI run proves native ARM64 compilation, packaging, installability, uninstallability, and private multimedia linkage. It cannot prove the physical board's kernel/media-device behavior or a particular stream's decoder selection.
-
-## Runtime testing on Orange Pi 5 Pro
-
-See [`docs/runtime-testing.md`](docs/runtime-testing.md) for the real-board checklist. Hardware decoding must be confirmed from runtime evidence on the Orange Pi rather than inferred from smooth playback or from the build succeeding.
-
-## Troubleshooting
-
-### UI is blank or Qt WebEngine fails
-
-Run Stremio from a terminal and keep the Qt/Chromium output:
-
-```bash
-stremio 2>&1 | tee stremio-runtime.log
-```
-
-Record `XDG_SESSION_TYPE`, `WAYLAND_DISPLAY`, and `DISPLAY` before applying session-specific workarounds.
-
-### Private libraries are not being used
-
-Do not copy libraries manually into `/usr/lib`. Check the installed loader state:
-
-```bash
-patchelf --print-rpath /opt/stremio/stremio
-ldd /opt/stremio/stremio | grep -E 'libmpv|libavcodec|libavformat|libavutil'
-```
-
-The RK3588 multimedia libraries should resolve from `/opt/stremio/rk3588/lib`.
-
-### Hardware acceleration is not selected
-
-Capture Stremio/mpv output and kernel/media-driver evidence as described in [`docs/runtime-testing.md`](docs/runtime-testing.md). `hwdec=auto` by itself is not proof that RKVDEC is decoding the stream.
-
-## Known limitations
-
-- The final release still requires real-board playback validation for the exact target kernel, display session, media file/stream, and codec profile being used.
-- The Stremio server is an upstream JavaScript artifact downloaded from Stremio's pinned CDN URL during package creation; it is not rebuilt from source by this repository.
-- `ubuntu-26.04-arm` is a GitHub-hosted runner label; runner availability is controlled by GitHub.
-
-## Attribution and license
-
-Stremio Shell is upstream software from the Stremio project. The source build is pinned to the official repository; Linux compatibility work was informed by `fragarray/stremio-rpi5`. Preserve upstream copyright and licensing when redistributing builds.
-
-This repository's carried Stremio-compatible source changes are distributed under GPL-3.0. See [`LICENSE.md`](LICENSE.md).
+See [`LICENSE.md`](LICENSE.md). Upstream components retain their own licenses and copyright notices.
