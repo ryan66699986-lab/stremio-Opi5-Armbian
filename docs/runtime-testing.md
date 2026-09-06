@@ -1,38 +1,31 @@
 # Orange Pi 5 Pro runtime test checklist
 
-Use this checklist on a real Orange Pi 5 Pro after installing the `orp2` package on the target Armbian / Ubuntu 26.04 system.
+Use this checklist on a real Orange Pi 5 Pro after installing a candidate package on the target Armbian / Ubuntu 26.04 system.
 
 CI proves that the package builds, installs, and links to the private RK3588 multimedia stack. These checks prove what happens on the actual board.
 
 ## Confirmed ORP2 board findings
 
-Physical Orange Pi 5 Pro testing has established the following for the released ORP2 baseline:
+Physical Orange Pi 5 Pro testing established the following for the preserved ORP2 baseline:
 
-- **H.264 1920x804:** `h264-v4l2request` selected the RK3588 `rkvdec` media driver and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV12 with pitch 1920 and it rendered successfully.
-- **HEVC Main10 3840x2160:** `hevc-v4l2request` selected `rkvdec` and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV15 with pitch 4800 and this sample rendered successfully.
+- **H.264 1920x804:** `h264-v4l2request` selected the RK3588 `rkvdec` media driver and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV12 with pitch 1920 and it rendered successfully. This is the genuinely known-good visual playback path.
+- **HEVC Main10 3840x2160:** `hevc-v4l2request` selected `rkvdec` and mpv reported `Using hardware decoding (v4l2request)`. The decoded DRM PRIME format was NV15 with pitch 4800 and the DMA-BUF imported successfully. **Do not treat that import as proof of correct visual presentation.** Later ORP10 physical testing reproduced the same successful decode/import characteristics while the actual screen was green.
 - **HEVC Main10 1920x804:** `hevc-v4l2request` again selected `rkvdec` and hardware decoding succeeded, but presentation failed after decode. The NV15 DRM PRIME surface had pitch 2400 and Mesa reported `WSI pitch not properly aligned`, followed by NV15 DMA-BUF import / hardware-surface mapping failure.
 
-These results are important because they separate the remaining failure from decoder selection. ORP2 has proved that the RK3588 V4L2 Request decoder path is functional for both H.264 and HEVC Main10. The unresolved problem is dimension/stride-sensitive presentation of some NV15 hardware-decoded surfaces through the Stremio/libmpv OpenGL render path.
+These results separate several layers that must not be conflated. ORP2 proved that the RK3588 V4L2 Request decoder path is functional for H.264 and HEVC Main10. The unresolved HEVC/Main10 problem is presentation of NV15 hardware-decoded surfaces.
 
-Do not generalize one successful 4K NV15 sample to all HEVC Main10 content: the 3840-wide pitch-4800 sample imported successfully while the 1920-wide pitch-2400 sample did not.
+For every HEVC/NV15 result, record separately:
 
-## Clean ORP3 experiment: tested and rejected
+1. decoder success (`Using hardware decoding (v4l2request)`),
+2. DRM PRIME format and pitch,
+3. DMA-BUF import success/failure,
+4. actual on-screen visual correctness.
 
-A clean ORP3 candidate was built from the ORP2 baseline with one runtime change only: `vd-lavc-dr=no`. The goal was to test whether libavcodec direct rendering caused the bad NV15 allocation seen on the failing 1920x804 Main10 sample.
-
-Physical board testing rejected that hypothesis:
-
-- ORP3 was confirmed active because startup reported `Set property: vd-lavc-dr="no"`.
-- **HEVC Main10 1920x804** still hardware-decoded through `hevc-v4l2request` / `rkvdec`, still produced DRM PRIME NV15 with pitch **2400**, and still failed with `WSI pitch not properly aligned`, `Failed to import NV15 byte plane 0`, `mapping DRM dmabuf failed`, and `Mapping hardware decoded surface failed`.
-- **HEVC Main10 3840x2160** remained successful with NV15 pitch **4800**.
-- A separate **HEVC Main10 3840x1608** stream also hardware-decoded successfully and repeatedly imported NV15 with pitch **4800**.
-- **H.264 1920x804** remained successful through `h264-v4l2request` / `rkvdec`, using NV12 with pitch **1920**.
-
-Conclusion: disabling libavcodec direct rendering did not alter the failing NV15 stride and did not fix presentation. Clean ORP3 is therefore rejected as a deployment candidate. ORP2 remains the supported baseline.
-
-The extra successful 3840x1608 sample strengthens the working width/pitch diagnosis: both tested 3840-wide Main10 streams produce pitch 4800 and import successfully despite different heights, while the tested 1920-wide Main10 stream produces pitch 2400 and fails. This supports focusing future research on the NV15 DMA-BUF stride/alignment boundary rather than decoder selection or generic libmpv direct-rendering settings.
+A successful `Imported DRM NV15...` log line proves only the import step. It does not prove the displayed pixels are correct.
 
 ## Install and verify package layout
+
+For the frozen ORP2 fallback:
 
 ```bash
 sudo apt install ./stremio_4.4.181-orp2_arm64.deb
@@ -46,36 +39,29 @@ strings "$(readlink -f /opt/stremio/rk3588/lib/libmpv.so)" | grep -m1 v4l2reques
 
 Confirm:
 
-- the installed version is `4.4.181-orp2` and architecture is `arm64`;
+- package architecture is `arm64`;
 - `/usr/bin/stremio` resolves to `/opt/stremio/stremio`;
 - Stremio's RPATH is `$ORIGIN/rk3588/lib`;
-- `libmpv.so` resolves from `/opt/stremio/rk3588/lib`;
-- `libavcodec.so`, `libavformat.so`, and related private FFmpeg libraries resolve from `/opt/stremio/rk3588/lib`;
+- `libmpv.so`, `libavcodec.so`, `libavformat.so`, and related private libraries resolve from `/opt/stremio/rk3588/lib`;
 - the private libmpv contains `v4l2request` support.
 
 If any of those fail, stop before playback testing. Do not copy replacement libraries into `/usr/lib`.
 
 ## Launch and UI
 
-Capture terminal output during the first launch:
+Capture terminal output during launch:
 
 ```bash
 stremio 2>&1 | tee stremio-runtime.log
 ```
 
-Confirm:
-
-- the Stremio process starts without loader errors;
-- the GUI appears in the desktop session;
-- Qt WebEngine renders the application UI;
-- the local Stremio server starts and the UI connects to it;
-- libmpv initializes and video can be displayed.
+Confirm the application starts, the UI renders, the Stremio service connects, libmpv initializes, and video can actually be displayed.
 
 ## Playback behavior
 
 Test representative media and confirm:
 
-- video playback;
+- video playback and **actual visual correctness**;
 - audio output;
 - seeking forward and backward;
 - subtitle selection and rendering;
@@ -83,66 +69,41 @@ Test representative media and confirm:
 - clean stop/exit;
 - successful relaunch after exit.
 
-Record the codec and profile for each test file or stream. A result for one H.264/HEVC profile does not prove every profile is supported by the hardware path.
+Record codec/profile and resolution for each test. A result for one H.264/HEVC profile does not prove every profile.
 
 ## Hardware decoding evidence
 
-Successful playback is not enough to prove hardware decoding. During playback, keep Stremio output and collect kernel/media evidence:
+During playback, keep Stremio output and collect kernel/media evidence where useful:
 
 ```bash
 journalctl -k -b | grep -Ei 'v4l2|rkvdec|request|media|video|drm'
-```
-
-Also inspect the running system's media devices where available:
-
-```bash
 ls -l /dev/video* /dev/media* 2>/dev/null || true
 ```
-
-The package's patch makes generic Stremio `hwdec=yes` / `hwdec=auto` requests try `v4l2request` first, but the runtime result must still be confirmed from the decoder actually selected and from the RK3588 media-driver activity.
 
 For each hardware-decoding test, record:
 
 - codec and profile;
 - resolution and frame rate;
 - whether `v4l2request` was selected;
-- relevant `rkvdec` / V4L2 Request kernel messages;
-- hardware frame format (`nv12`, `NV15`, etc.);
+- relevant `rkvdec` / V4L2 Request messages;
+- hardware frame format (`NV12`, `NV15`, etc.);
 - DRM PRIME pitch/stride where reported;
-- any DMA-BUF import or mapping errors;
-- whether playback remained stable while seeking;
-- CPU load as supporting evidence only, not as the primary proof.
+- DMA-BUF import or mapping errors;
+- whether the **actual displayed image is visually correct** (including green/black/corrupt output);
+- whether playback remains stable while seeking.
 
-Do not mark hardware acceleration as working merely because `hwdec=auto` is accepted or because playback is smooth.
-
-## Desktop/session diagnostics
-
-If Qt WebEngine, rendering, or the window fails, record:
-
-```bash
-echo "$XDG_SESSION_TYPE"
-echo "$WAYLAND_DISPLAY"
-echo "$DISPLAY"
-qtpaths --qt-version
-```
-
-If another desktop session is available, compare behavior only as a diagnostic step. Avoid making global package changes such as disabling Wayland, sandboxing, or GPU features unless a reproduced target-specific failure proves they are required.
-
-## Uninstall
-
-```bash
-sudo apt remove stremio
-```
-
-Confirm `/usr/bin/stremio` and the package-owned files under `/opt/stremio` are removed normally by dpkg.
+Do not mark hardware acceleration or visual playback as working merely because `hwdec=auto` is accepted, playback is smooth, or a DMA-BUF import succeeds.
 
 ## Pass criteria
 
-Mark the release as board-validated only when all of these are true on the target Orange Pi 5 Pro:
+Promote a current build only when all of these are true on the target Orange Pi 5 Pro:
 
-- package layout and private-library linkage are correct;
+- package layout/private-library linkage are correct;
 - UI launches and renders normally;
 - normal playback controls work;
-- tested hardware-decodable streams select the RK3588 V4L2 Request path with supporting runtime evidence;
-- no system multimedia libraries had to be replaced or manually copied;
+- tested hardware-decodable streams use the expected RK3588 hardware path;
+- tested video is actually visually correct on-screen;
+- no system multimedia libraries had to be replaced manually;
 - uninstall completes normally.
+
+If a current build regresses, fall back to `baseline/orp2-working` rather than carrying another local ORP experiment forward.
