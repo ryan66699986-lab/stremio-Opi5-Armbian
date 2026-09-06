@@ -19,12 +19,12 @@ ORP2 is the rollback point. Future development must not destroy or rewrite that 
 
 Development after ORP2 no longer uses ORP3/ORP4/etc. numbering.
 
-The forward line is simply **current** and follows the newest relevant upstream branch heads at build time:
+The forward line is simply **current** and follows the newest upstream branch heads at build time:
 
 - Stremio: `Stremio/stremio-linux-shell` → `main`
 - RK3588 FFmpeg: `ryanfitz/FFmpeg` → `rk3588-hevc-rps-controls`
 - RK3588 mpv/libmpv: `ryanfitz/mpv-rockchip` → `rk3588-nv15-gpu-next`
-- libplacebo: current upstream revision required by the mpv build
+- libplacebo: `haasn/libplacebo` → `master`
 
 The current line should contain as little project-specific multimedia code as possible. Prefer upstream fixes. Do not add speculative renderer/copyback/stride hacks merely to produce another candidate.
 
