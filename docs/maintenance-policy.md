@@ -15,7 +15,7 @@ The current line follows the latest commit on the relevant upstream branches at 
 - `Stremio/stremio-linux-shell` `main`
 - `ryanfitz/FFmpeg` `rk3588-hevc-rps-controls`
 - `ryanfitz/mpv-rockchip` `rk3588-nv15-gpu-next`
-- the current libplacebo revision used by that mpv build
+- `haasn/libplacebo` `master`
 
 The exact resolved commit IDs should be recorded by CI/build output so a tested package can be identified after the moving branches advance.
 
