@@ -11,24 +11,47 @@ It is preserved permanently at:
 - branch: `baseline/orp2-working`
 - release: `v4.4.181-orp2`
 
-ORP2 uses the older Qt Stremio shell plus a private RK3588 FFmpeg/libmpv V4L2 Request stack under `/opt/stremio/rk3588`. It does not replace distribution multimedia libraries.
+ORP2 uses the older Qt Stremio shell plus a private RK3588 FFmpeg/libmpv V4L2 Request stack under `/opt/stremio/rk3588`. It is the rollback point and is not rewritten by forward development.
 
-ORP2 is the rollback point. Future development must not destroy or rewrite that baseline.
+## Current line
 
-## Current development policy
-
-Development after ORP2 no longer uses ORP3/ORP4/etc. numbering.
-
-The forward line is simply **current** and follows the newest upstream branch heads at build time:
+Forward development is simply called **current**. It uses the official Rust/GTK `Stremio/stremio-linux-shell` and resolves the latest commit on these upstream branches at build time:
 
 - Stremio: `Stremio/stremio-linux-shell` → `main`
 - RK3588 FFmpeg: `ryanfitz/FFmpeg` → `rk3588-hevc-rps-controls`
 - RK3588 mpv/libmpv: `ryanfitz/mpv-rockchip` → `rk3588-nv15-gpu-next`
 - libplacebo: `haasn/libplacebo` → `master`
 
-The current line should contain as little project-specific multimedia code as possible. Prefer upstream fixes. Do not add speculative renderer/copyback/stride hacks merely to produce another candidate.
+The exact resolved commit IDs are recorded in `.work/current.env` during each build.
 
-A moving upstream build is not a supported release just because it compiles. Physical Orange Pi testing remains authoritative. If current upstream regresses, use the preserved ORP2 baseline while waiting for upstream fixes.
+The current line carries no ORP3-ORP10 renderer, copyback, direct-rendering, stride or capture-width experiments. It keeps only the private multimedia isolation that was useful in ORP2:
+
+```text
+/opt/stremio/stremio
+/opt/stremio/server.js
+/opt/stremio/rk3588/lib/...
+```
+
+The current package uses a minimal `/usr/bin/stremio` launcher only to set the upstream-required `SERVER_PATH` and start `/opt/stremio/stremio`.
+
+## Build
+
+Use native ARM64 Ubuntu 26.04:
+
+```bash
+./scripts/install-deps.sh
+./scripts/build-rk3588-stack.sh
+./scripts/build.sh
+./scripts/build-deb.sh
+```
+
+The package is named from the Stremio Linux shell version resolved at build time, for example:
+
+```text
+stremio_1.2.0-current_arm64.deb
+```
+
+A green CI build is not a supported release. Physical Orange Pi 5 Pro testing remains the promotion gate. If current upstream regresses, use `baseline/orp2-working`.
 
 See [`docs/maintenance-policy.md`](docs/maintenance-policy.md).
 
@@ -44,20 +67,9 @@ See [`docs/runtime-testing.md`](docs/runtime-testing.md) and [`docs/hardware-dec
 
 ## Archived experiments
 
-ORP3 through ORP10 are rejected research history, not release candidates. Their results are retained because they document what was tried and what failed.
+ORP3 through ORP10 are rejected research history, not release candidates. Their results are retained only to document what was tried and what failed.
 
 See [`docs/experimental-branches.md`](docs/experimental-branches.md) and [`docs/archive/README.md`](docs/archive/README.md).
-
-## Build layout
-
-The proven ORP2 architecture keeps the RK3588 multimedia stack private:
-
-```text
-/opt/stremio/stremio
-/opt/stremio/rk3588/lib/...
-```
-
-That isolation principle remains useful for future builds: experimental/current multimedia libraries should not overwrite Ubuntu/Armbian FFmpeg, mpv or Mesa packages.
 
 ## Runtime rule
 
