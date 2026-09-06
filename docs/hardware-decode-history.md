@@ -1,6 +1,6 @@
 # RK3588 hardware-decode investigation history
 
-This document records the board-level findings that led to the current Stremio ORP2 baseline and the later controlled ORP3 experiments. It is historical evidence, not a recommendation to restore the earlier ad-hoc test stack.
+This document records the board-level findings that led to the current Stremio ORP2 baseline and the later controlled ORP experiments. It is historical evidence, not a recommendation to restore the earlier ad-hoc test stack.
 
 ## Target system
 
@@ -103,8 +103,15 @@ The current packaged Stremio work should be evaluated from the ORP2 private stac
 
 ORP2 later provided the more relevant application-level results inside Stremio:
 
-- H.264/NV12 direct V4L2 Request decode and rendering works;
-- at least one 4K HEVC Main10/NV15 sample direct-imports and renders correctly;
+- H.264/NV12 direct V4L2 Request decode and visual rendering works;
+- 3840-wide HEVC Main10/NV15 can direct-import successfully at pitch 4800, but import success must not be treated as proof of correct visual presentation;
 - a 1920x804 HEVC Main10/NV15 sample still hardware-decodes successfully but fails during DRM PRIME / DMA-BUF import with Mesa pitch-alignment errors.
 
-Therefore the remaining target problem is not whether RK3588 can decode H.264/HEVC in hardware. It is the presentation/import behavior of specific NV15 Main10 surfaces.
+Later ORP10 physical testing made the distinction explicit: a 3840x2160 HEVC Main10 stream again used `v4l2request`, exported NV15 at pitch 4800, and repeatedly logged successful DMA-BUF import, while the actual displayed video remained green. That means the previously recorded 3840-wide result was a **decode/import success**, not a validated end-to-end visual success.
+
+Therefore the remaining target problem is not whether RK3588 can decode H.264/HEVC in hardware. It is the presentation of NV15 Main10 surfaces, with at least two distinct observed failure modes:
+
+1. **1920-wide / pitch 2400:** Mesa rejects the DMA-BUF pitch during import.
+2. **3840-wide / pitch 4800:** DMA-BUF import can succeed, yet the displayed image can still be visually wrong (green).
+
+Future experiments must record decoder success, surface layout, import outcome, and actual visual correctness independently.
