@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: Stremio Shell
-Source: https://github.com/Stremio/stremio-shell
+Upstream-Name: Stremio Linux Shell
+Source: https://github.com/Stremio/stremio-linux-shell
 
 Files: *
 Copyright: Stremio contributors
