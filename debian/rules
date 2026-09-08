@@ -16,11 +16,13 @@ override_dh_auto_install:
 	install -Dm644 data/com.stremio.Stremio.desktop debian/stremio/usr/share/applications/com.stremio.Stremio.desktop
 	install -Dm644 data/icons/com.stremio.Stremio.svg debian/stremio/usr/share/icons/hicolor/scalable/apps/com.stremio.Stremio.svg
 	install -Dm644 data/com.stremio.Stremio.gschema.xml debian/stremio/usr/share/glib-2.0/schemas/com.stremio.Stremio.gschema.xml
-	mkdir -p debian/stremio/opt/stremio/rk3588/lib
+	mkdir -p debian/stremio/opt/stremio/rk3588/lib debian/stremio/opt/stremio/rk3588/bin
 	cp -a rk3588-stack/lib/. debian/stremio/opt/stremio/rk3588/lib/
+	install -Dm755 rk3588-stack/bin/ffmpeg debian/stremio/opt/stremio/rk3588/bin/ffmpeg
+	install -Dm755 rk3588-stack/bin/ffprobe debian/stremio/opt/stremio/rk3588/bin/ffprobe
 
 override_dh_strip:
-	dh_strip -Xrk3588/lib -Xopt/stremio/stremio
+	dh_strip -Xrk3588/lib -Xrk3588/bin -Xopt/stremio/stremio
 
 override_dh_shlibdeps:
 	dh_shlibdeps -- -l$(CURDIR)/debian/stremio/opt/stremio/rk3588/lib
