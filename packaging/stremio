@@ -1,4 +1,12 @@
 #!/bin/sh
+# libmpv requires the numeric locale to be C. LC_ALL would override LC_NUMERIC,
+# so clear it before forcing the supported numeric locale.
+unset LC_ALL
 export LC_NUMERIC=C
+
 export SERVER_PATH=/opt/stremio/server.js
+export FFMPEG_BIN=/opt/stremio/rk3588/bin/ffmpeg
+export FFPROBE_BIN=/opt/stremio/rk3588/bin/ffprobe
+export PATH=/opt/stremio/rk3588/bin:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}
+
 exec /opt/stremio/stremio "$@"
