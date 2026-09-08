@@ -33,9 +33,10 @@ FFMPEG_COMMIT=$(clone_head "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_BRANCH" "$FFMPEG_
     --prefix="$RK_STACK_PREFIX" \
     --libdir="$RK_STACK_PREFIX/lib" \
     --incdir="$RK_STACK_PREFIX/include" \
+    --bindir="$RK_STACK_PREFIX/bin" \
     --enable-shared \
     --disable-static \
-    --disable-programs \
+    --disable-ffplay \
     --disable-doc \
     --disable-debug \
     --enable-pic \
@@ -47,6 +48,11 @@ FFMPEG_COMMIT=$(clone_head "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_BRANCH" "$FFMPEG_
   make -j"$(nproc)"
   make DESTDIR="$STAGE_DIR" install
 )
+
+test -x "${PREFIX_DIR}/bin/ffmpeg"
+test -x "${PREFIX_DIR}/bin/ffprobe"
+patchelf --set-rpath '$ORIGIN/../lib' "${PREFIX_DIR}/bin/ffmpeg"
+patchelf --set-rpath '$ORIGIN/../lib' "${PREFIX_DIR}/bin/ffprobe"
 
 FFMPEG_PC="${PREFIX_DIR}/lib/pkgconfig"
 FFMPEG_BUILD_PC="${WORK_ROOT}/ffmpeg-pkgconfig"
@@ -108,6 +114,7 @@ cat >"${WORK_ROOT}/stack.env" <<EOF
 RK_STACK_STAGE=${STAGE_DIR}
 RK_STACK_PREFIX=${RK_STACK_PREFIX}
 RK_STACK_LIBDIR=${PREFIX_DIR}/lib
+RK_STACK_BINDIR=${PREFIX_DIR}/bin
 RK_STACK_INCLUDEDIR=${PREFIX_DIR}/include
 RK_FFMPEG_RESOLVED_COMMIT=${FFMPEG_COMMIT}
 RK_MPV_RESOLVED_COMMIT=${MPV_COMMIT}
