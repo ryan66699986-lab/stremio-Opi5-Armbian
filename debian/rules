@@ -1,30 +1,28 @@
 #!/usr/bin/make -f
 
 %:
-	dh $@ --buildsystem=cmake
+	dh $@
 
 override_dh_auto_configure:
-	dh_auto_configure -- \
-		-DCMAKE_BUILD_TYPE=Release \
-		-DCMAKE_INSTALL_PREFIX=/ \
-		-DCMAKE_INSTALL_RPATH='$$ORIGIN/rk3588/lib' \
-		-DMPV_INCLUDE_DIR=$(CURDIR)/rk3588-stack/include \
-		-DMPV_LIBRARY_mpv=$(CURDIR)/rk3588-stack/lib/libmpv.so
+	:
+
+override_dh_auto_build:
+	:
 
 override_dh_auto_install:
-	dh_auto_install
-	install -Dm644 server.js debian/stremio/opt/stremio/server.js
-	install -Dm644 smartcode-stremio.desktop debian/stremio/usr/share/applications/stremio.desktop
-	install -Dm644 images/stremio.svg debian/stremio/usr/share/icons/hicolor/scalable/apps/smartcode-stremio.svg
-	mkdir -p debian/stremio/opt/stremio/rk3588/lib
+	install -Dm755 target/release/stremio-linux-shell debian/stremio/opt/stremio/stremio
+	install -Dm644 data/server.js debian/stremio/opt/stremio/server.js
+	install -Dm755 debian/stremio-launcher debian/stremio/usr/bin/stremio
+	install -Dm644 data/com.stremio.Stremio.desktop debian/stremio/usr/share/applications/com.stremio.Stremio.desktop
+	install -Dm644 data/icons/com.stremio.Stremio.svg debian/stremio/usr/share/icons/hicolor/scalable/apps/com.stremio.Stremio.svg
+	install -Dm644 data/com.stremio.Stremio.gschema.xml debian/stremio/usr/share/glib-2.0/schemas/com.stremio.Stremio.gschema.xml
+	mkdir -p debian/stremio/opt/stremio/rk3588/lib debian/stremio/opt/stremio/rk3588/bin
 	cp -a rk3588-stack/lib/. debian/stremio/opt/stremio/rk3588/lib/
+	install -Dm755 rk3588-stack/bin/ffmpeg debian/stremio/opt/stremio/rk3588/bin/ffmpeg
+	install -Dm755 rk3588-stack/bin/ffprobe debian/stremio/opt/stremio/rk3588/bin/ffprobe
 
 override_dh_strip:
-	# The private RK3588 stack is installed from release builds and has already
-	# had its debug information removed.  Re-stripping those staged libraries
-	# makes GNU objcopy reject libmpv, so only let dh_strip process Stremio and
-	# other normal package files.
-	dh_strip -Xrk3588/lib
+	dh_strip -Xrk3588/lib -Xrk3588/bin -Xopt/stremio/stremio
 
 override_dh_shlibdeps:
 	dh_shlibdeps -- -l$(CURDIR)/debian/stremio/opt/stremio/rk3588/lib

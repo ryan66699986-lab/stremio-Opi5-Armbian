@@ -6,64 +6,62 @@ ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 source "${ROOT_DIR}/upstream.env"
 
 if [[ $(dpkg --print-architecture) != arm64 ]]; then
-  echo "error: native arm64 build required; current architecture is $(dpkg --print-architecture)" >&2
+  echo "error: native arm64 build required" >&2
   exit 1
 fi
 
-WORK_ROOT="${ROOT_DIR}/.work"
-SOURCE_DIR="${WORK_ROOT}/stremio-shell"
-BUILD_DIR="${SOURCE_DIR}/build"
-RK_WORK="${ROOT_DIR}/.work/rk3588-stack"
-RK_STAGE="${RK_WORK}/stage"
-RK_PREFIX="${RK_STAGE}${RK_STACK_PREFIX}"
-RK_LIBDIR="${RK_PREFIX}/lib"
-RK_INCLUDEDIR="${RK_PREFIX}/include"
-
-if [[ ! -e "${RK_LIBDIR}/libmpv.so" ]]; then
-  echo "error: RK3588 multimedia stack not found; run ./scripts/build-rk3588-stack.sh first" >&2
+RK_ENV="${ROOT_DIR}/.work/rk3588-stack/stack.env"
+if [[ ! -f "$RK_ENV" ]]; then
+  echo "error: RK3588 stack not found; run ./scripts/build-rk3588-stack.sh first" >&2
   exit 1
 fi
+# shellcheck disable=SC1090
+source "$RK_ENV"
 
-rm -rf "${SOURCE_DIR}"
-mkdir -p "${WORK_ROOT}"
+SOURCE_DIR="${ROOT_DIR}/.work/stremio-linux-shell"
+rm -rf "$SOURCE_DIR"
+git clone --filter=blob:none --depth=1 --branch "$STREMIO_SOURCE_BRANCH" \
+  "$STREMIO_SOURCE_REPOSITORY" "$SOURCE_DIR"
+STREMIO_COMMIT=$(git -C "$SOURCE_DIR" rev-parse HEAD)
+STREMIO_VERSION=$(awk -F'"' '/^version = "/ {print $2; exit}' "$SOURCE_DIR/Cargo.toml")
 
-git clone --filter=blob:none --no-checkout "${STREMIO_SOURCE_REPOSITORY}" "${SOURCE_DIR}"
-git -C "${SOURCE_DIR}" fetch --depth=1 origin "${STREMIO_SOURCE_COMMIT}"
-git -C "${SOURCE_DIR}" checkout --detach "${STREMIO_SOURCE_COMMIT}"
-git -C "${SOURCE_DIR}" submodule update --init --recursive deps/libmpv deps/singleapplication
+BUILD_PC="${ROOT_DIR}/.work/current-pkgconfig"
+rm -rf "$BUILD_PC"
+mkdir -p "$BUILD_PC"
+cp -a "${RK_STACK_LIBDIR}/pkgconfig/." "$BUILD_PC/"
+while IFS= read -r -d '' pc; do
+  sed -i "s|${RK_STACK_PREFIX}|${RK_STACK_STAGE}${RK_STACK_PREFIX}|g" "$pc"
+done < <(find "$BUILD_PC" -type f -name '*.pc' -print0)
 
-git -C "${SOURCE_DIR}" apply --check "${ROOT_DIR}/patches/0001-linux-modern-libmpv.patch"
-git -C "${SOURCE_DIR}" apply "${ROOT_DIR}/patches/0001-linux-modern-libmpv.patch"
+export PKG_CONFIG_PATH="${BUILD_PC}${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+export LD_LIBRARY_PATH="${RK_STACK_LIBDIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+# libmpv2-sys emits -lmpv without propagating a native search path. Point the
+# system linker at the staged private libmpv while Cargo links the shell.
+export LIBRARY_PATH="${RK_STACK_LIBDIR}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
 
-export PKG_CONFIG_PATH="${RK_LIBDIR}/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
-export LD_LIBRARY_PATH="${RK_LIBDIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+(
+  cd "$SOURCE_DIR"
+  cargo build --release --locked
+)
 
-cmake -S "${SOURCE_DIR}" -B "${BUILD_DIR}" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/ \
-  -DMPV_INCLUDE_DIR="${RK_INCLUDEDIR}" \
-  -DMPV_LIBRARY_mpv="${RK_LIBDIR}/libmpv.so"
-cmake --build "${BUILD_DIR}" --parallel "$(nproc)"
+BINARY="${SOURCE_DIR}/target/release/stremio-linux-shell"
+test -x "$BINARY"
+patchelf --set-rpath '$ORIGIN/rk3588/lib' "$BINARY"
+readelf -h "$BINARY" | grep -q 'Machine:.*AArch64'
+readelf -d "$BINARY" | grep -q 'Shared library: \[libmpv\.so'
 
-# The installed executable lives in /opt/stremio, with the private multimedia
-# stack in /opt/stremio/rk3588/lib.
-patchelf --set-rpath '$ORIGIN/rk3588/lib' "${BUILD_DIR}/stremio"
+grep -q 'env::var("SERVER_PATH")' "$SOURCE_DIR/src/server.rs"
+test -f "$SOURCE_DIR/data/server.js"
 
-file "${BUILD_DIR}/stremio"
-readelf -h "${BUILD_DIR}/stremio" | grep -E 'Class:|Machine:'
-readelf -d "${BUILD_DIR}/stremio" | grep -E 'NEEDED|RPATH|RUNPATH' || true
+cat >"${ROOT_DIR}/.work/current.env" <<EOF
+STREMIO_VERSION=${STREMIO_VERSION}
+PACKAGE_REVISION=${PACKAGE_REVISION}
+STREMIO_RESOLVED_COMMIT=${STREMIO_COMMIT}
+RK_FFMPEG_RESOLVED_COMMIT=${RK_FFMPEG_RESOLVED_COMMIT}
+RK_MPV_RESOLVED_COMMIT=${RK_MPV_RESOLVED_COMMIT}
+RK_LIBPLACEBO_RESOLVED_COMMIT=${RK_LIBPLACEBO_RESOLVED_COMMIT}
+EOF
 
-if ! readelf -h "${BUILD_DIR}/stremio" | grep -q 'Machine:.*AArch64'; then
-  echo "error: build output is not AArch64" >&2
-  exit 1
-fi
-if ! readelf -d "${BUILD_DIR}/stremio" | grep -q 'Shared library: \[libmpv\.so'; then
-  echo "error: Stremio did not link against libmpv" >&2
-  exit 1
-fi
-if ! patchelf --print-rpath "${BUILD_DIR}/stremio" | grep -qx '\$ORIGIN/rk3588/lib'; then
-  echo "error: Stremio private multimedia RPATH is missing" >&2
-  exit 1
-fi
-
-echo "Built Stremio ${STREMIO_VERSION} from ${STREMIO_SOURCE_COMMIT} against RK3588 V4L2-request libmpv"
+printf 'Stremio current built\n  version %s\n  Stremio %s\n  FFmpeg %s\n  mpv %s\n  libplacebo %s\n' \
+  "$STREMIO_VERSION" "$STREMIO_COMMIT" "$RK_FFMPEG_RESOLVED_COMMIT" \
+  "$RK_MPV_RESOLVED_COMMIT" "$RK_LIBPLACEBO_RESOLVED_COMMIT"

@@ -19,24 +19,24 @@ PREFIX_DIR="${STAGE_DIR}${RK_STACK_PREFIX}"
 rm -rf "${WORK_ROOT}"
 mkdir -p "${WORK_ROOT}" "${STAGE_DIR}"
 
-clone_pinned() {
-  local repo=$1 commit=$2 dir=$3
-  git clone --filter=blob:none --no-checkout "$repo" "$dir"
-  git -C "$dir" fetch --depth=1 origin "$commit"
-  git -C "$dir" checkout --detach "$commit"
+clone_head() {
+  local repo=$1 branch=$2 dir=$3
+  git clone --filter=blob:none --depth=1 --branch "$branch" "$repo" "$dir"
+  git -C "$dir" rev-parse HEAD
 }
 
-echo "==> Building pinned FFmpeg V4L2-request stack"
-clone_pinned "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_COMMIT" "$FFMPEG_DIR"
+echo "==> Resolving current RK3588 FFmpeg"
+FFMPEG_COMMIT=$(clone_head "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_BRANCH" "$FFMPEG_DIR")
 (
   cd "$FFMPEG_DIR"
   ./configure \
     --prefix="$RK_STACK_PREFIX" \
     --libdir="$RK_STACK_PREFIX/lib" \
     --incdir="$RK_STACK_PREFIX/include" \
+    --bindir="$RK_STACK_PREFIX/bin" \
     --enable-shared \
     --disable-static \
-    --disable-programs \
+    --disable-ffplay \
     --disable-doc \
     --disable-debug \
     --enable-pic \
@@ -44,38 +44,28 @@ clone_pinned "$RK_FFMPEG_REPOSITORY" "$RK_FFMPEG_COMMIT" "$FFMPEG_DIR"
     --enable-libdrm \
     --enable-libudev \
     --enable-v4l2-request
-  grep -E 'CONFIG_V4L2_REQUEST[[:space:]]+1' config.h
+  grep -E 'CONFIG_V4L2_REQUEST[[:space:]]+1' config.h >/dev/null
   make -j"$(nproc)"
   make DESTDIR="$STAGE_DIR" install
 )
 
-FFMPEG_PC="${PREFIX_DIR}/lib/pkgconfig"
-test -f "${FFMPEG_PC}/libavcodec.pc"
-test -f "${PREFIX_DIR}/include/libavutil/hwcontext.h"
-grep -q 'AV_HWDEVICE_TYPE_V4L2REQUEST' "${PREFIX_DIR}/include/libavutil/hwcontext.h"
+test -x "${PREFIX_DIR}/bin/ffmpeg"
+test -x "${PREFIX_DIR}/bin/ffprobe"
+patchelf --set-rpath '$ORIGIN/../lib' "${PREFIX_DIR}/bin/ffmpeg"
+patchelf --set-rpath '$ORIGIN/../lib' "${PREFIX_DIR}/bin/ffprobe"
 
-# FFmpeg's installed .pc files intentionally describe the final runtime prefix
-# (/opt/stremio/rk3588). During this staged package build, however, mpv must
-# compile and link against the DESTDIR copy. Give Meson a temporary pkg-config
-# view with every final-prefix occurrence rebased to the staging tree. The
-# package contents themselves retain the correct final /opt paths.
+FFMPEG_PC="${PREFIX_DIR}/lib/pkgconfig"
 FFMPEG_BUILD_PC="${WORK_ROOT}/ffmpeg-pkgconfig"
-rm -rf "$FFMPEG_BUILD_PC"
 mkdir -p "$FFMPEG_BUILD_PC"
 cp -a "${FFMPEG_PC}/." "$FFMPEG_BUILD_PC/"
 while IFS= read -r -d '' pc; do
   sed -i "s|${RK_STACK_PREFIX}|${PREFIX_DIR}|g" "$pc"
 done < <(find "$FFMPEG_BUILD_PC" -type f -name '*.pc' -print0)
 
-echo "==> Verifying staged FFmpeg pkg-config paths"
-PKG_CONFIG_PATH="$FFMPEG_BUILD_PC" pkg-config --cflags libavutil | tee /tmp/rk-libavutil-cflags.txt
-grep -F "${PREFIX_DIR}/include" /tmp/rk-libavutil-cflags.txt
-PKG_CONFIG_PATH="$FFMPEG_BUILD_PC" pkg-config --libs libavutil | tee /tmp/rk-libavutil-libs.txt
-grep -F "${PREFIX_DIR}/lib" /tmp/rk-libavutil-libs.txt
-
-echo "==> Building pinned mpv/libmpv V4L2-request stack"
-clone_pinned "$RK_MPV_REPOSITORY" "$RK_MPV_COMMIT" "$MPV_DIR"
-clone_pinned "$RK_LIBPLACEBO_REPOSITORY" "$RK_LIBPLACEBO_COMMIT" "$MPV_DIR/subprojects/libplacebo"
+echo "==> Resolving current RK3588 mpv/libmpv"
+MPV_COMMIT=$(clone_head "$RK_MPV_REPOSITORY" "$RK_MPV_BRANCH" "$MPV_DIR")
+rm -rf "$MPV_DIR/subprojects/libplacebo"
+LIBPLACEBO_COMMIT=$(clone_head "$RK_LIBPLACEBO_REPOSITORY" "$RK_LIBPLACEBO_BRANCH" "$MPV_DIR/subprojects/libplacebo")
 git -C "$MPV_DIR/subprojects/libplacebo" submodule update --init --recursive
 
 export PKG_CONFIG_PATH="${FFMPEG_BUILD_PC}${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
@@ -107,33 +97,29 @@ meson setup "${MPV_DIR}/build" "$MPV_DIR" \
 meson compile -C "${MPV_DIR}/build" -j "$(nproc)"
 DESTDIR="$STAGE_DIR" meson install -C "${MPV_DIR}/build"
 
-test -e "${PREFIX_DIR}/lib/libmpv.so"
-test -e "${PREFIX_DIR}/include/mpv/client.h"
-
-# Keep the private multimedia stack self-contained. Stremio gets its own
-# $ORIGIN/rk3588/lib RPATH; private libmpv/FFmpeg libraries resolve peers here.
 while IFS= read -r -d '' elf; do
-  if [[ -L "$elf" ]]; then
-    continue
-  fi
+  [[ -L "$elf" ]] && continue
   if readelf -h "$elf" >/dev/null 2>&1; then
     patchelf --set-rpath '$ORIGIN' "$elf" || true
   fi
 done < <(find "${PREFIX_DIR}/lib" -maxdepth 1 -type f -name '*.so*' -print0)
 
 LIBMPV_REAL=$(readlink -f "${PREFIX_DIR}/lib/libmpv.so")
-readelf -h "$LIBMPV_REAL" | grep -q 'Machine:.*AArch64'
-readelf -d "$LIBMPV_REAL" | grep NEEDED
-strings "$LIBMPV_REAL" | grep -q 'v4l2request'
+readelf -h "$LIBMPV_REAL" | grep 'Machine:.*AArch64' >/dev/null
+# Do not use grep -q here: with pipefail it may terminate strings early and
+# turn a successful match into status 141 from SIGPIPE.
+strings "$LIBMPV_REAL" | grep 'v4l2request' >/dev/null
 
 cat >"${WORK_ROOT}/stack.env" <<EOF
 RK_STACK_STAGE=${STAGE_DIR}
 RK_STACK_PREFIX=${RK_STACK_PREFIX}
 RK_STACK_LIBDIR=${PREFIX_DIR}/lib
+RK_STACK_BINDIR=${PREFIX_DIR}/bin
 RK_STACK_INCLUDEDIR=${PREFIX_DIR}/include
+RK_FFMPEG_RESOLVED_COMMIT=${FFMPEG_COMMIT}
+RK_MPV_RESOLVED_COMMIT=${MPV_COMMIT}
+RK_LIBPLACEBO_RESOLVED_COMMIT=${LIBPLACEBO_COMMIT}
 EOF
 
-echo "RK3588 stack built:"
-echo "  FFmpeg: ${RK_FFMPEG_COMMIT}"
-echo "  mpv: ${RK_MPV_COMMIT}"
-echo "  prefix: ${PREFIX_DIR}"
+printf 'RK3588 stack built\n  FFmpeg %s\n  mpv %s\n  libplacebo %s\n' \
+  "$FFMPEG_COMMIT" "$MPV_COMMIT" "$LIBPLACEBO_COMMIT"
