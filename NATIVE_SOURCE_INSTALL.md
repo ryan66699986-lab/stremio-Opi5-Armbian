@@ -1,74 +1,60 @@
-# Native Stremio source install
+# Final native Stremio for Orange Pi 5 Pro / RK3588S
 
-This is the clean native-source path for the current `Stremio/stremio-linux-shell` Rust/GTK client.
+This is the final native-source path for the Orange Pi 5 Pro RK3588S target.
 
-The installer intentionally does **not** accept software video decoding as success. On Rockchip/RK3588 it requires the system `mpv/libmpv` stack to expose `v4l2request` or `rkmpp`; otherwise it stops with the inspection output instead of installing a misleading CPU-decoding setup.
+It uses the current stable `Stremio/stremio-linux-shell` release `v1.2.0` at commit `c6e7cd22e23ed6401e573fe7fe1a023fc07399a2`, linked against the project's pinned private RK3588 V4L2-request FFmpeg/libmpv stack under `/opt/stremio/rk3588`.
 
-## Run on the target Linux desktop
+The distro multimedia stack is left intact. System Mesa, FFmpeg and mpv are not replaced.
 
-Run this as the normal desktop user, not from a root shell. The script invokes `sudo` only for system package/install operations.
+## Install on the Orange Pi
+
+Run as the normal desktop user:
 
 ```bash
-rm -rf ~/stremio-native-installer && \
-git clone --depth 1 --branch native-stremio-source-install \
+rm -rf ~/stremio-rk3588s-final && \
+git clone --depth 1 --branch final/native-rk3588s-stremio-v1.2.0 \
   https://github.com/ryan66699986-lab/stremio-Opi5-Armbian.git \
-  ~/stremio-native-installer && \
-bash ~/stremio-native-installer/scripts/install-native-stremio.sh 2>&1 | tee ~/stremio-native-install.log
+  ~/stremio-rk3588s-final && \
+bash ~/stremio-rk3588s-final/scripts/install-final-rk3588s.sh
 ```
 
-## What it does
+Then launch normally:
 
-1. Reads `/etc/os-release`, kernel/architecture and the device tree.
-2. Inspects GPU/display state with `lspci`, `glxinfo`, `/dev/dri`, and Rockchip/Mali/Panfrost/Panthor device-tree detection.
-3. Detects the package manager and existing compiler/build tools.
-4. Inspects installed GTK4, libadwaita, WebKitGTK, libmpv and libepoxy versions.
-5. Detects existing Stremio Flatpak, Snap, Debian/RPM/pacman and manual/native installations.
-6. Removes those existing Stremio installations while leaving the user's Stremio profile/data alone.
-7. Uses the detected package manager's search command before installing the distro-equivalent dependencies from the upstream README.
-8. Verifies the API versions required by current Stremio source.
-9. Inspects `mpv --hwdec=help`, FFmpeg hwaccels and video devices. On RK3588, `v4l2request` or `rkmpp` is mandatory.
-10. Where a copy-back hwdec exists, creates a small H.264 test clip and proves the decoder/device can actually hardware-decode it.
-11. Resolves the latest stable upstream Stremio release, clones that exact tag recursively, and builds it with Cargo in release mode.
-12. Installs the native app to standard paths:
-    - `/usr/local/libexec/stremio/stremio`
-    - `/usr/local/libexec/stremio/server.js`
-    - `/usr/bin/stremio`
-    - desktop/icon/metainfo/schema files under `/usr/share`
-13. Installs `/usr/bin/stremio` as a wrapper which sets `SERVER_PATH` and `LC_NUMERIC=C`, plus the upstream GPU-specific environment overrides where applicable.
-14. Removes `DBusActivatable=true` from the installed desktop file.
-15. Compiles the GLib schema and checks the installed binary for unresolved shared libraries.
-16. Launch-smoke-tests Stremio when a graphical session is available.
-17. Installs and enables the daily `stremio-native-update.timer` **user** timer.
+```bash
+stremio
+```
 
-## Daily updates
+## Final architecture
 
-The timer checks the upstream GitHub release once per day. If a newer stable release exists it rebuilds it as the desktop user and installs it under:
+- Native Rust/GTK Stremio Linux shell, not Flatpak.
+- Upstream Stremio release pinned to `v1.2.0` for reproducibility.
+- Private V4L2-request FFmpeg/libmpv stack under `/opt/stremio/rk3588`.
+- Stremio binary and `server.js` under `/opt/stremio`.
+- `/usr/bin/stremio` is a small launcher; desktop integration uses that launcher.
+- `STREMIO_RK3588_V4L2REQUEST=1` activates the RK3588-specific shell shim.
+- The shim forces `hwdec=v4l2request-copy` at libmpv initialization and prevents the web UI from replacing it with another `hwdec` value.
+- Copy-back is deliberate: decode remains on the RK3588S VPU while decoded frames are copied into the GL presentation path, avoiding the NV15 DMA-BUF import/presentation failure that blocked the direct path.
+- No distro FFmpeg/mpv/Mesa libraries are overwritten.
+- Existing Stremio application packages are removed, but the user's Stremio profile/data is not deleted.
+
+## Reproducible build
+
+For build-only use on native ARM64:
+
+```bash
+bash scripts/install-deps.sh
+sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libepoxy-dev gettext nodejs rustc cargo
+bash scripts/build-final-native-rk3588s.sh
+```
+
+The staged final application is produced at:
 
 ```text
-~/.local/libexec/stremio/releases/<tag>
+.work/final-native-rk3588s/stage/opt/stremio
 ```
 
-`/usr/bin/stremio` automatically prefers the newest successfully built user-local release and falls back to the system baseline if none exists. This avoids giving a user systemd timer passwordless root access.
+GitHub Actions performs this ARM64 build and archives the staged result. It does not run synthetic media playback tests.
 
-Check the timer with:
+## Preserved baseline
 
-```bash
-systemctl --user status stremio-native-update.timer
-systemctl --user list-timers stremio-native-update.timer
-```
-
-## Final embedded hardware-decode proof
-
-The installer proves that the system libmpv has the required hardware backend and, where possible, that the decoder device actually works. To prove the same path from inside Stremio, launch it once with debug logging:
-
-```bash
-RUST_LOG=debug stremio 2>&1 | tee ~/stremio-hwdec.log
-```
-
-Play a known hardware-decodable title, then inspect:
-
-```bash
-grep -Ei 'hwdec|hardware decoding|drm_prime|v4l2request|rkmpp|vaapi|vulkan|nvdec' ~/stremio-hwdec.log
-```
-
-For RK3588, success means the log shows `v4l2request` or `rkmpp` hardware decoding and does **not** report a software-decoding fallback.
+`baseline/orp2-working` remains untouched as the known-working Qt/ORP2 historical baseline. The final native-shell work is separate from that preserved branch.
