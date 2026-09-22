@@ -1,0 +1,66 @@
+name: Build final native RK3588S Stremio
+
+on:
+  push:
+    branches:
+      - final/native-rk3588s-v1.2.0-mainline
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Confirm native ARM64
+        run: |
+          uname -a
+          test "$(dpkg --print-architecture)" = arm64
+
+      - name: Install private-stack build dependencies
+        run: bash ./scripts/install-deps.sh
+
+      - name: Install native Stremio shell dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev \
+            libepoxy-dev gettext nodejs rustc cargo
+
+      - name: Build final native Stremio and private RK3588 V4L2-request stack
+        run: |
+          set -o pipefail
+          bash ./scripts/build-final-native-rk3588s.sh 2>&1 | tee final-native-build.log
+
+      - name: Verify staged final layout
+        run: |
+          set -euxo pipefail
+          test -x .work/final-native-rk3588s/stage/opt/stremio/stremio
+          test -s .work/final-native-rk3588s/stage/opt/stremio/server.js
+          test "$(cat .work/final-native-rk3588s/stage/opt/stremio/VERSION)" = v1.2.0
+          test "$(cat .work/final-native-rk3588s/stage/opt/stremio/SOURCE_COMMIT)" = c6e7cd22e23ed6401e573fe7fe1a023fc07399a2
+          readelf -h .work/final-native-rk3588s/stage/opt/stremio/stremio | grep -q 'Machine:.*AArch64'
+          strings "$(readlink -f .work/final-native-rk3588s/stage/opt/stremio/rk3588/lib/libmpv.so)" | grep -q v4l2request
+
+      - name: Archive install stage
+        run: |
+          tar -C .work/final-native-rk3588s/stage -cJf stremio-native-rk3588s-v1.2.0-arm64.tar.xz opt/stremio
+          sha256sum stremio-native-rk3588s-v1.2.0-arm64.tar.xz > stremio-native-rk3588s-v1.2.0-arm64.tar.xz.sha256
+
+      - name: Upload final ARM64 stage
+        uses: actions/upload-artifact@v4
+        with:
+          name: stremio-native-rk3588s-v1.2.0-arm64
+          path: |
+            stremio-native-rk3588s-v1.2.0-arm64.tar.xz
+            stremio-native-rk3588s-v1.2.0-arm64.tar.xz.sha256
+            final-native-build.log
+          if-no-files-found: error
