@@ -2,7 +2,7 @@ diff --git a/src/app/video/imp.rs b/src/app/video/imp.rs
 index fd2666f..5d6d4ad 100644
 --- a/src/app/video/imp.rs
 +++ b/src/app/video/imp.rs
-@@ -38,6 +38,10 @@ impl Default for Video {
+@@ -39,6 +39,10 @@ impl Default for Video {
              init.set_property("video-sync", "audio")?;
              init.set_property("terminal", "yes")?;
              init.set_property("msg-level", msg_level)?;
@@ -17,7 +17,7 @@ diff --git a/src/app/video/mod.rs b/src/app/video/mod.rs
 index 68423f9..51dc7fa 100644
 --- a/src/app/video/mod.rs
 +++ b/src/app/video/mod.rs
-@@ -105,7 +105,12 @@ impl Video {
+@@ -107,7 +107,12 @@ impl Video {
              }
              name if STRING_PROPERTIES.contains(&name) => {
                  if let Some(value) = value.as_str() {
@@ -26,7 +26,9 @@ index 68423f9..51dc7fa 100644
 +                        && std::env::var_os("STREMIO_RK3588_V4L2REQUEST").is_some()
 +                    {
 +                        "v4l2request-copy"
-+                    } else { value };
++                    } else {
++                        value
++                    };
 +                    widget.set_property(name, value);
                  }
              }
