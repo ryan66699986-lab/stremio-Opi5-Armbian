@@ -1,0 +1,33 @@
+diff --git a/src/app/video/imp.rs b/src/app/video/imp.rs
+index fd2666f..5d6d4ad 100644
+--- a/src/app/video/imp.rs
++++ b/src/app/video/imp.rs
+@@ -38,6 +38,10 @@ impl Default for Video {
+             init.set_property("video-sync", "audio")?;
+             init.set_property("terminal", "yes")?;
+             init.set_property("msg-level", msg_level)?;
++            if env::var_os("STREMIO_RK3588_V4L2REQUEST").is_some() {
++                init.set_property("hwdec", "v4l2request-copy")?;
++                init.set_property("hwdec-codecs", "all")?;
++            }
+             Ok(())
+         })
+         .expect("Failed to create mpv");
+diff --git a/src/app/video/mod.rs b/src/app/video/mod.rs
+index 68423f9..51dc7fa 100644
+--- a/src/app/video/mod.rs
++++ b/src/app/video/mod.rs
+@@ -105,7 +105,12 @@ impl Video {
+             }
+             name if STRING_PROPERTIES.contains(&name) => {
+                 if let Some(value) = value.as_str() {
+-                    widget.set_property(name, value);
++                    let value = if name == "hwdec"
++                        && std::env::var_os("STREMIO_RK3588_V4L2REQUEST").is_some()
++                    {
++                        "v4l2request-copy"
++                    } else { value };
++                    widget.set_property(name, value);
+                 }
+             }
+             name => warn!("Failed to set property {name}: Unsupported"),
