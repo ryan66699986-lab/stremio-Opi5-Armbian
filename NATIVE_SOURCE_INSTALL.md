@@ -8,11 +8,11 @@ The distro multimedia stack is left intact. System Mesa, FFmpeg and mpv are not 
 
 ## Install on the Orange Pi
 
-Run as the normal desktop user:
+Run as the normal desktop user after this work is merged to `main`:
 
 ```bash
 rm -rf ~/stremio-rk3588s-final && \
-git clone --depth 1 --branch final/native-rk3588s-v1.2.0-mainline \
+git clone --depth 1 --branch main \
   https://github.com/ryan66699986-lab/stremio-Opi5-Armbian.git \
   ~/stremio-rk3588s-final && \
 bash ~/stremio-rk3588s-final/scripts/install-final-rk3588s.sh
