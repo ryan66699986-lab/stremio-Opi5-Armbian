@@ -80,7 +80,7 @@ command -v gtk-update-icon-cache >/dev/null && sudo gtk-update-icon-cache -f -t 
 [[ $(cat "$PREFIX/VERSION") == "$STREMIO_TAG" ]]
 [[ $(cat "$PREFIX/SOURCE_COMMIT") == "$STREMIO_COMMIT" ]]
 readelf -h "$PREFIX/stremio" | grep -q 'Machine:.*AArch64'
-ldd "$PREFIX/stremio" | grep -q "$RK_PREFIX/lib/libmpv"
+LD_LIBRARY_PATH="$RK_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$PREFIX/stremio" | grep -q "$RK_PREFIX/lib/libmpv"
 strings "$(readlink -f "$RK_PREFIX/lib/libmpv.so")" | grep -q v4l2request
 grep -q 'STREMIO_RK3588_V4L2REQUEST=1' /usr/bin/stremio
 
